@@ -1,47 +1,54 @@
-# Aptilume 0.2.0 doğrulama kaydı
+# Aptilume 0.3.0 doğrulama kaydı
 
-4 Kasım 2026. Son kaynak kodu ve Docker imajında çalıştırılan kontroller:
+**4 Kasım 2026.** Güvenlik incelemesi [ilk bulgular](SECURITY_REVIEW.md) ve [uygulama sonuçları](SECURITY_REMEDIATION.md) olarak ayrı tutulur.
 
 | Kontrol | Sonuç |
 |---|---|
-| Python testleri | **53 geçti**. Starlette TestClient ve ldap3/pyasn1 için toplam üç bağımlılık kullanım dışı bırakma uyarısı; başarısız test yok. |
-| TypeScript + Vite production build | Başarılı; modüler ECharts; büyük bundle uyarısı yok. |
-| Oturum | Anonim erişim reddi, Argon2 parola, cookie HttpOnly/SameSite/Secure, CSRF/Origin, oturum rotasyonu, çıkış, parola değişimiyle tüm oturumların iptali, giriş sınırı ve boşta kalma süresi doğrulandı. Arka plan yenilemesi idle süresini uzatmıyor. |
-| Çalışan kapsamı | Başkasının atama/form/yanıt/submit adresleriyle erişim engellendi. Kendi profil, sonuç, anket ve gelişim planları doğrulandı. Yönetici/İK başkası adına yanıt gönderemiyor. |
-| Yönetici kapsamı | Aynı departmandaki iki yöneticinin kişi kapsamları ayrıldı. Alt yönetici ağacı ve yalnızca doğrudan rapor seçeneği test edildi. Yetkisiz ekip filtresi/dönem oluşturma/ortak dönem kapatma/puanlama/yayın engellendi. |
-| Admin ve İK | Entegrasyon admini iş verisi uçlarından 403 alıyor; bootstrap çalışan/ekip/dönem listeleri boş. İK tüm veri ve entegrasyonlara erişebiliyor. |
-| Canlı yetki değişimi | Devre dışı hesap, rol değişimi, yönetici değişimi ve AD ayar değişiminden sonra oturum/kapsam yeniden uygulanıyor. İstemci kapsam sürümü değişince eski ekran verisini temizliyor. |
-| LDAP | Gerçek ldap3 MOCK_SYNC bind, yanlış parola, filtre kaçışları, GUID/durum alanları, manager döngüsü, grup önceliği ve otomatik yönetici rolü test edildi. LDAPS sertifika doğrulaması zorunlu; referral takip edilmiyor. Dizin kesintisinde süresi dolmuş yetki önbelleği fail-closed çalışıyor. Gerçek kurum AD’si kullanılmadı. |
-| Sırlar | AD servis parolası şifreleniyor ve API yanıtlarında yok. Çalışan LDAP parolası saklanmıyor. Bağlantı/servis hesabı değişiminde eski sır başka sunucuya taşınmıyor. Repo kontrolünde runtime DB, anahtar veya token kalıbı bulunmadı. |
-| Anket / değerlendirme | 22 soruluk karma form, rol/title snapshot’ı, taslak sürüm çatışması, kapanış sonrası ayrı worker, rubrik matematiği, alıntı kontrolü, teknik hata/sıfır ayrımı, lease ve çift worker kurtarması doğrulandı. |
-| Rapor / Excel | Metrikler hesaplanmadan önce kişi kapsamı uygulanıyor. Dosya oluşturma ve indirme kapsamı denetleniyor; yönetici ilişkisi değişince eski dosya indirilemiyor. Excel formül benzeri metinler literal string. |
-| Gelişim planları | Oluşturma/düzenleme, kişi/ekip kapsamı, durumu ve optimistic revision çatışması; tarayıcı yenilemesinden sonra kalıcılık doğrulandı. |
-| PostgreSQL 16 | Son imajla izole container’da SQLite → PostgreSQL taşıma, katalog, 30 fixture kişi, 3 rol, form, worker, yayın, metrik, oturumlu plan oluşturma/güncelleme ve kapsamlı Excel indirme başarılı. |
-| Docker | `aptilume:0.2.0` **linux/amd64 + linux/arm64** olarak üretildi. Manifest index: `sha256:fa490bd8dd0898e37b4d604d0e93456e84bd908e9c341bd322ae1c8bf0f928ad`. |
-| Üretim modu container testi | UID **100123:0**, read-only root, tüm capability’ler kapalı, no-new-privileges, yalnızca data/tmp yazılabilir. Temiz kurulum: 42 skill, **0 kişi / 0 ekip**. Üretim admin girişi, Secure cookie, adminin iş verisinden reddi ve dokümantasyon uçlarının kapalı olması doğrulandı. Runtime image’da UI fixture/test login bypass bulunmuyor. |
-| Üretim başlangıç sınırları | Varsayılan admin/admin ve eksik şifreleme anahtarı reddediliyor. Güçlü bootstrap parola kabul ediliyor. Üretimde mock LLM ile iş başlatılması engelleniyor. |
-| Tarayıcı | Yapı Kredi logosu + Aptilume giriş sayfası; admin/İK/yönetici/çalışan menüleri; alt kullanıcı menüsü ve çıkış; AD formu; gelişim butonları ve karşılaştırma; çalışan form autosave ve yeniden açınca korunması doğrulandı. |
-| Temalar | Açık/koyu tema hem giriş sayfası hem uygulama/formlarda incelendi. Seçim sayfa yenilemesinden sonra korunuyor; dar ve geniş yerleşim kontrol edildi. |
+| Python testleri | **119 geçti**; Starlette TestClient ve ldap3/pyasn1 kaynaklı 3 deprecation uyarısı, başarısız test yok. |
+| Web / biçim | TypeScript + Vite production build ve Black kontrolü başarılı. |
+| Kayıt kapsamı | Çalışan kendi profil/atama/yanıt/sonuç/planını, yönetici AD manager ağacını görür. Başkasının ID'si, farklı ekip filtresi, export ve yetki değişimi testleri geçti. İK kurum genelinde; entegrasyon admini iş verisi uçlarında 403 alır. |
+| Auth | Argon2, güçlü production parola, Secure/HttpOnly/__Host- cookie, CSRF/sabit Host/Origin, logout/rotasyon, boşta kalma/absolute expiry; hesap/IP/genel atomik kota, 4 parola işlemi ve 5 oturum sınırı doğrulandı. |
+| AD | GUID/disabled/grup/manager döngüsü, ldap3 MOCK_SYNC, süreli fail-closed önbellek ve toplu grup sorguları. Admin önerisi aktif ayarı değiştirmez; yalnız İK onaylar, eski/çift karar reddedilir, uygulamada LDAP oturumları iptal olur. Gerçek kurum AD'si kullanılmadı. |
+| Bağlantı / TLS | İzinli host/port/CIDR, metadata/IPv4-mapped engeli, DNS IP sabitleme, örtük proxy/redirect engeli ve secret rotasyonu. Native TLS testinde doğru CA+SNI başarı, yanlış hostname ve güvenilmeyen CA reddi. |
+| Girdi / kaynak | Akışta gövde/boyut/süre sınırı, yinelenen/derin/nonfinite JSON reddi, secret içermeyen 4xx; model bütçeleri/şema/kanıt, export alanı/kota/saklama, atomik inceleme ve kendi yanıtını onaylayamama doğrulandı. |
+| İş akışı | 22 soruluk karma form, rol/title snapshot, taslak sürüm çatışması, kapanış sonrası worker, rubrik/kanıt ve teknik hata ayrımı, lease/çift worker, yayın ve gelişim planları mevcut regresyonlarda geçti. |
+| Excel / audit | Kapsam, formül metni, SHA-256/yol/symlink/boyut kontrolü, süreli silme; güvenlik olaylarının redaksiyonu ve İK erişimi test edildi. |
+| Python CVE | pip-audit: kilitli runtime bağımlılıklarında 0 bilinen açık. |
+| Web CVE | pnpm audit: prod+dev 125 bağımlılıkta tüm seviyeler 0. |
+| Bandit | Orta/yüksek önem ve güven eşiğinde 0 sonuç. Pod bind'i için tek gerekçeli B104 satır istisnası; global skip yok. |
+| Container CVE | Son amd64 ve arm64 image arşivlerinde Trivy tüm önem seviyelerinde 0 bildirim. Ignore/VEX istisnası yok. |
+| PostgreSQL 16 | SQLite aktarımı + 42 skill/30 sentetik kişi/3 rol/22 soruluk form; worker/yayın/metrik, oturumlu plan ve kapsamlı Excel geçti. Pg kontrol deposunda atomik kotalar/oturumlar ve CRUD-only runtime rolü doğrulandı; DDL reddedildi. İzole fixture TLS kapalı; kurum DB TLS kabulü yapılmadı. |
+| Production container | UID 100123:0, read-only root, tüm capability'ler kapalı, no-new-privileges; HTTPS giriş/Secure cookie, 42 skill/0 kişi, admin iş verisi reddi, docs 404, fixture bypass/test/kurulum araçları yok. Eksik secret/varsayılan zayıf parola başlangıcı reddedilir. |
+| Tarayıcı | İki rol ile AD öneri/onay/oturum iptali doğrulandı. Önceki login/tema/rol menüleri ve anket/gelişim/Excel doğrulamaları korunuyor. DB bozukken admin kurtarma ekranı ayrıca test edildi. |
+| CI | GitHub Actions test, statik/bağımlılık/image taraması, build, production fail-closed ve PostgreSQL adımlarını otomatik çalıştırır. Çalıştırma durumu GitHub Actions'tan kontrol edilir. |
 
-## Yerel çalışma durumu
+## Image ve yerel çalışma
 
-API ve worker `compose.dev.yml` ile `http://127.0.0.1:8080` adresinde çalışır. İlk kurulum hesabı yerelde **admin / admin**; yalnızca entegrasyon ekranına erişir. Mevcut `aptilume_aptilume-data` volume’u korunmuştur; eski örnek veriler otomatik silinmemiştir. Yeni kurulum sentetik kişi/dönem üretmez.
+`aptilume:0.3.0`, **linux/amd64 + linux/arm64** olarak üretildi. Yerel manifest index:
 
-İK/yönetici/çalışan tarayıcı kontrolleri 8090 portunda geçici, izole fixture verisiyle yapıldı. Bu sunucu, PostgreSQL fixture container/network ve kabul testi volume’u doğrulama sonrasında temizlenir. Gerçek uygulama kimlik doğrulamasına test kullanıcısı eklenmez.
+`sha256:e33921a9332216e07db2f37d1729709672c31c8de87ceed34c0d6b7bfad7909d`
 
-## Yeniden çalıştırma
+API ve worker `compose.dev.yml` ile `http://127.0.0.1:8080` adresinde çalışır. Yerel hesap **admin / admin**, yalnızca entegrasyon ekranına erişir. Gerçek `aptilume_aptilume-data` volume'u korunmuştur. Yeni production kurulum sentetik çalışan üretmez; production admin/admin kabul etmez.
+
+UI kontrolleri 8090 portunda izole fixture, DB kontrolleri yalnızca adı doğrulanan geçici PostgreSQL host'u ile yapıldı. Bu test yardımcıları runtime image'a alınmaz. Sahip olunan geçici test kaynakları kontrollerden sonra kaldırılır.
+
+## Tekrar çalıştırma
 
 ```bash
 .venv/bin/python -m pytest
+.venv/bin/python -m black --check backend tests
+pip-audit --no-deps --disable-pip -r requirements.lock.txt
+bandit -r backend/app -ll -ii
 cd web
+pnpm audit --audit-level=low
 pnpm build
 cd ..
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.2.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.3.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
-PostgreSQL harness `tests/check_postgres.py`, yalnızca adı doğrulanan izole fixture host’una bağlanır; kurum veritabanında çalıştırılacak genel bir veri silme/yeniden oluşturma aracı değildir. UI fixture `tests/serve_ui_fixture.py` runtime imajına kopyalanmaz.
+Doğrulama araçları `requirements-dev.txt` ve `requirements-security.txt` içindedir; runtime'a kurulmaz. Çok mimarili `--load`, bu ortamda etkin containerd image store gerektirir. Trivy tüm CVE seviyeleriyle yerel image arşivini tarar; CI örneği workflow'dadır.
 
-## Kurum ortamında kalan kabul
+## Kurum kabulü
 
-Gerçek AD sunucu/CA/servis hesabı ve rol grup DN’leri admin panelinde girilmeli; kurum hesabı ile giriş, disabled kullanıcı, grup ve `manager` senaryoları kurumda doğrulanmalıdır. Gerçek LLM kalite/kalibrasyonu, OpenShift Route/SCC/Secret/PVC koşulları, yedek/geri dönüş ve hedef eşzamanlı yük henüz kurum ortamında test edilmemiştir. Bu kayıt gerçek endpoint veya cluster kabulünün yapıldığını iddia etmez. Deployment kullanıcı ekibine aittir.
+Gerçek AD/LLM/CA, PostgreSQL verify-full el sıkışması, MFA erişim katmanı, OpenShift Route/SCC/NetworkPolicy/Secret/PVC, SIEM alarmı, yük/DAST/sızma testi ve yedekten geri dönüş kurumda doğrulanmalıdır. Bu kayıt dış ortam kabulü veya sıfır açık garantisi değildir. Ayrıntılı sorumlu/kanıt listesi [sonuç raporundadır](SECURITY_REMEDIATION.md).

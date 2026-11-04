@@ -1,5 +1,8 @@
 import argparse
 import os
+
+# Pod ingress is controlled by Route and NetworkPolicy; serving requires this bind.
+DEFAULT_BIND = "0.0.0.0"  # nosec B104
 from sqlalchemy import select
 from .config import Settings
 from .store import Store
@@ -47,11 +50,46 @@ def seed(store):
 def main():
     p = argparse.ArgumentParser(description="Aptilume runtime")
     p.add_argument(
-        "command", choices=["api", "worker", "bootstrap", "seed", "migrate", "drain"]
+        "command",
+        choices=[
+            "api",
+            "worker",
+            "bootstrap",
+            "seed",
+            "migrate",
+            "drain",
+            "storage-migrate",
+        ],
+    )
+    p.add_argument("--profile-id")
+    p.add_argument(
+        "--services-stopped",
+        action="store_true",
+        help="Operator attests API and worker are stopped; never use against live services.",
     )
     args = p.parse_args()
     store = Store(Settings.from_env())
-    if args.command == "bootstrap":
+    if args.command == "storage-migrate":
+        if not args.profile_id or not args.services_stopped:
+            raise RuntimeError(
+                "API ve worker durdurulmalı; --profile-id ve --services-stopped gerekli."
+            )
+        from .audit import record
+
+        record(
+            store,
+            "offline_storage_migration_started",
+            actor_id="operator-cli",
+            target_id=args.profile_id,
+        )
+        print(store.activate_db(args.profile_id, copy_existing=True, offline=True))
+        record(
+            store,
+            "offline_storage_migration_completed",
+            actor_id="operator-cli",
+            target_id=args.profile_id,
+        )
+    elif args.command == "bootstrap":
         load_catalog(store)
         from .security import AuthService
 
@@ -67,8 +105,12 @@ def main():
 
         uvicorn.run(
             create_app(store=store),
-            host=os.getenv("APP_HOST", "0.0.0.0"),
+            host=os.getenv("APP_HOST", DEFAULT_BIND),
             port=int(os.getenv("APP_PORT", "8080")),
+            forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", ""),
+            limit_concurrency=100,
+            timeout_keep_alive=5,
+            server_header=False,
         )
     elif args.command == "worker":
         Worker(store).run()

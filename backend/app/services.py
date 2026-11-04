@@ -185,6 +185,10 @@ def create_campaign(store, name, team_ids=None, participant_ids=None):
                 )
             )
         )
+        if len(profiles) > 100:
+            raise DomainError(
+                "campaign_limit", "Bir dönemde en fazla 100 rol profili kullanılabilir."
+            )
         cfg["role_snapshots"] = {
             r.id: {
                 "id": r.id,
@@ -382,6 +386,8 @@ def generate_questions(store, job):
     provider = Provider(
         store.resolve(version_id=job.payload["profile_version"]),
         store.settings.allowed_hosts,
+        allowed_cidrs=store.settings.allowed_cidrs,
+        ca_file=store.settings.llm_ca_file,
     )
     generated = []
     seen_common = False
@@ -421,7 +427,9 @@ def generate_questions(store, job):
                 "example_questions": examples,
             },
         )
-        questions = value.get("questions", [])
+        from .validation import QuestionSet
+
+        questions = QuestionSet.model_validate(value).model_dump()["questions"]
         if (
             len(questions) != 22
             or sum(q.get("type") == "open_text" for q in questions) != 12
@@ -459,6 +467,10 @@ def generate_questions(store, job):
                 raise DomainError(
                     "invalid_answer_key",
                     "Tek seçim sorusunda bir doğru seçenek gerekli.",
+                )
+            if len({o["id"] for o in q["options"]}) != len(q["options"]):
+                raise DomainError(
+                    "invalid_answer_key", "Seçenek kimlikleri benzersiz olmalı."
                 )
             is_common = q["skill_id"] in COMMON
             if is_common and seen_common:

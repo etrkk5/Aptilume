@@ -124,8 +124,103 @@ def main():
         with store.session() as s:
             assert s.get(DevelopmentAction, value["id"]).status == "completed"
             assert s.get(ExportScope, export.json()["id"]).creator_id == "fixture-hr"
+        # Exercise the new control-store security tables on PostgreSQL as well.
+        from concurrent.futures import ThreadPoolExecutor
+        from app.models import Binding, AuthSession
+        from app.throttle import reserve
+        from app.security import AuthService
+        from app.store import DomainError
+
+        controlled = Store(
+            Settings(
+                path,
+                f"postgresql+psycopg://postgres:fixture-only@{host}/aptilume_fixture?sslmode=disable",
+            )
+        )
+        target = controlled.save_profile(
+            "db",
+            "Existing fixture",
+            {
+                "engine": "postgresql",
+                "host": host,
+                "database": "aptilume_fixture",
+                "username": "postgres",
+                "sslmode": "disable",
+            },
+        )
+        with controlled.cs() as s:
+            s.get(Binding, "application_db").version_id = target["id"] + ":1"
+        auth = AuthService(controlled)
+
+        def limited(i):
+            try:
+                reserve(controlled, "pg-race", "same-user", 5, 3600)
+                return True
+            except DomainError:
+                return False
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            assert sum(pool.map(limited, range(20))) == 5
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda _: auth.create_session("local-admin"), range(12)))
+        with controlled.cs() as s:
+            assert len(list(s.scalars(select(AuthSession)))) == 5
+        # Runtime works with CRUD permissions; schema DDL stays with the operator.
+        from sqlalchemy import text
+        from sqlalchemy.exc import DBAPIError
+
+        with controlled.control.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE ROLE aptilume_runtime_fixture LOGIN PASSWORD 'fixture-only' NOSUPERUSER NOCREATEDB NOCREATEROLE"
+                )
+            )
+            conn.execute(
+                text(
+                    "GRANT CONNECT ON DATABASE aptilume_fixture TO aptilume_runtime_fixture"
+                )
+            )
+            conn.execute(
+                text("GRANT USAGE ON SCHEMA public TO aptilume_runtime_fixture")
+            )
+            conn.execute(
+                text(
+                    "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO aptilume_runtime_fixture"
+                )
+            )
+        restricted = controlled.save_profile(
+            "db",
+            "Restricted runtime",
+            {
+                "engine": "postgresql",
+                "host": host,
+                "database": "aptilume_fixture",
+                "username": "aptilume_runtime_fixture",
+                "sslmode": "disable",
+            },
+            "fixture-only",
+        )
+        with controlled.cs() as s:
+            s.get(Binding, "application_db").version_id = restricted["id"] + ":1"
+        limited = Store(
+            Settings(
+                path,
+                f"postgresql+psycopg://aptilume_runtime_fixture:fixture-only@{host}/aptilume_fixture?sslmode=disable",
+            )
+        )
+        assert limited.application_error is None
+        limited_auth = AuthService(limited)
+        token, _ = limited_auth.login("admin", "admin", "fixture")
+        assert limited_auth.actor(token).integrations
+        try:
+            with limited.engine.begin() as conn:
+                conn.execute(text("CREATE TABLE denied_ddl_fixture (id integer)"))
+        except DBAPIError:
+            pass
+        else:
+            raise AssertionError("Runtime role unexpectedly has schema DDL permission")
         print(
-            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel."
+            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role."
         )
 
 

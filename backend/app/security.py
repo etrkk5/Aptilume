@@ -4,11 +4,12 @@ import os
 import secrets
 import threading
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from .models import DirectoryUser, AuthSession, LoginAttempt, Setting, ControlEvent
 from .store import DomainError
 from .directory import DirectoryClient, directory_config, synchronize
@@ -16,7 +17,35 @@ from .directory import DirectoryClient, directory_config, synchronize
 COOKIE = "aptilume_session"
 actor_context = ContextVar("actor", default=None)
 _sync_lock = threading.Lock()
+_login_slots = threading.BoundedSemaphore(4)
 passwords = PasswordHasher()
+
+
+@contextmanager
+def password_capacity():
+    if not _login_slots.acquire(blocking=False):
+        raise DomainError("login_busy", "Parola doğrulama hizmeti meşgul.", 429)
+    try:
+        yield
+    finally:
+        _login_slots.release()
+
+
+def strong_password(value):
+    return (
+        isinstance(value, str)
+        and 15 <= len(value) <= 128
+        and value == value.strip()
+        and len(set(value.casefold())) >= 6
+        and value.casefold()
+        not in {"password1234567", "admin1234567890", "changeme1234567"}
+        and "admin" not in value.casefold()
+        and value.casefold() != "123456789012345"
+    )
+
+
+def cookie_name(settings):
+    return COOKIE if settings.demo else "__Host-" + COOKIE
 
 
 @dataclass(frozen=True)
@@ -30,6 +59,7 @@ class Actor:
     participant_ids: frozenset | None
     csrf_token: str = ""
     temporary_password: bool = False
+    authenticated_at: float = 0
 
     @property
     def hr(self):
@@ -82,7 +112,7 @@ class Actor:
         }
 
 
-def actor_for_user(store, user_id, csrf=""):
+def actor_for_user(store, user_id, csrf="", authenticated_at=0):
     with store.cs() as s:
         user = s.get(DirectoryUser, user_id)
         if not user or not user.active:
@@ -122,6 +152,7 @@ def actor_for_user(store, user_id, csrf=""):
             None if "hr" in roles else frozenset(allowed),
             csrf,
             user.temporary_password,
+            authenticated_at,
         )
 
 
@@ -135,13 +166,9 @@ class AuthService:
                 pwd = os.getenv(
                     "BOOTSTRAP_ADMIN_PASSWORD", "admin" if store.settings.demo else ""
                 )
-                if (
-                    not pwd
-                    or not store.settings.demo
-                    and (pwd == "admin" or len(pwd) < 12)
-                ):
+                if not pwd or not store.settings.demo and not strong_password(pwd):
                     raise RuntimeError(
-                        "Üretimde güçlü BOOTSTRAP_ADMIN_PASSWORD gerekli."
+                        "Üretimde en az 15 karakterli güçlü BOOTSTRAP_ADMIN_PASSWORD gerekli."
                     )
                 s.add(
                     DirectoryUser(
@@ -155,42 +182,44 @@ class AuthService:
                         temporary_password=pwd == "admin",
                     )
                 )
-            elif not store.settings.demo and admin.active and admin.temporary_password:
+                if strong_password(pwd):
+                    s.add(Setting(key="local_password_policy", value={"version": 2}))
+            elif (
+                not store.settings.demo
+                and admin.active
+                and (
+                    admin.temporary_password
+                    or not s.get(Setting, "local_password_policy")
+                    or s.get(Setting, "local_password_policy").value.get("version") != 2
+                )
+            ):
                 raise RuntimeError(
                     "Üretime geçmeden geçici admin parolasını değiştirin."
                 )
 
     def login(self, username, password, client_ip):
+        from .throttle import reserve, refund
+        from .audit import record
+
         username = username.strip()
         if not username or not password or len(username) > 254 or len(password) > 1024:
             raise DomainError(
                 "invalid_credentials", "Kullanıcı adı veya parola hatalı.", 401
             )
-        key = hashlib.sha256(
-            (client_ip + ":" + username.casefold()).encode()
-        ).hexdigest()
-        stamp = time.time()
-        with self.store.cs() as s:
-            count = len(
-                list(
-                    s.scalars(
-                        select(LoginAttempt.id).where(
-                            LoginAttempt.key == key,
-                            LoginAttempt.created_at > stamp - 900,
-                        )
-                    )
-                )
+        reserve(self.store, "login-global", "all", 300, 60)
+        reserve(self.store, "login-ip", client_ip, 90, 60)
+        account = reserve(self.store, "login-account", username.casefold(), 5, 900)
+        if not _login_slots.acquire(blocking=False):
+            refund(self.store, account)
+            raise DomainError(
+                "login_busy",
+                "Giriş hizmeti meşgul. Kısa süre sonra tekrar deneyin.",
+                429,
             )
-            if count >= 5:
-                raise DomainError(
-                    "login_limited",
-                    "Çok sayıda başarısız deneme. 15 dakika sonra tekrar deneyin.",
-                    429,
-                )
         try:
             if username.casefold() == "admin":
-                with self.store.cs() as s:
-                    identity = s.get(DirectoryUser, "local-admin")
+                with self.store.cs() as session:
+                    identity = session.get(DirectoryUser, "local-admin")
                 try:
                     verified = identity.active and passwords.verify(
                         identity.password_hash, password
@@ -211,32 +240,55 @@ class AuthService:
                         503,
                     )
                 verified = self.client_factory(cfg).authenticate(username, password)
-                self.refresh_directory(force=True)
+                # Login performs a fresh user bind, while the full reporting tree uses its bounded TTL.
+                self.refresh_directory()
                 user_id = verified["id"]
-                with self.store.cs() as s:
-                    identity = s.get(DirectoryUser, user_id)
-                    if not identity or not identity.active:
-                        raise DomainError(
-                            "invalid_credentials",
-                            "Kullanıcı adı veya parola hatalı.",
-                            401,
-                        )
+                with self.store.cs() as session:
+                    identity = session.get(DirectoryUser, user_id)
+                if not identity or not identity.active:
+                    raise DomainError(
+                        "invalid_credentials", "Kullanıcı adı veya parola hatalı.", 401
+                    )
+            token, actor = self.create_session(user_id)
+            refund(self.store, account)
+            record(self.store, "login_succeeded", actor_id=user_id)
+            return token, actor
         except DomainError as exc:
-            if exc.status == 401:
-                with self.store.cs() as s:
-                    s.add(LoginAttempt(key=key, created_at=stamp))
+            if exc.status != 401:
+                refund(self.store, account)
+            record(
+                self.store,
+                "login_failed",
+                "denied",
+                account_hash=hashlib.sha256(username.casefold().encode()).hexdigest(),
+                reason=exc.code,
+            )
             raise
-        with self.store.cs() as s:
-            s.execute(delete(LoginAttempt).where(LoginAttempt.key == key))
-            s.add(ControlEvent(profile_id=user_id, action="login_succeeded", detail={}))
-        return self.create_session(user_id)
+        finally:
+            _login_slots.release()
 
     def create_session(self, user_id):
         token = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(32)
         stamp = time.time()
         with self.store.cs() as s:
+            locked = s.execute(
+                update(DirectoryUser)
+                .where(DirectoryUser.id == user_id, DirectoryUser.active == True)
+                .values(active=DirectoryUser.active)
+            )
+            if locked.rowcount != 1:
+                raise DomainError("session_invalid", "Oturum geçerli değil.", 401)
             s.execute(delete(AuthSession).where(AuthSession.expires_at < stamp))
+            previous = list(
+                s.scalars(
+                    select(AuthSession)
+                    .where(AuthSession.user_id == user_id)
+                    .order_by(AuthSession.last_seen.desc())
+                )
+            )
+            for old in previous[4:]:
+                s.delete(old)
             s.add(
                 AuthSession(
                     token_hash=hashlib.sha256(token.encode()).hexdigest(),
@@ -246,7 +298,7 @@ class AuthService:
                     last_seen=stamp,
                 )
             )
-        return token, actor_for_user(self.store, user_id, csrf)
+        return token, actor_for_user(self.store, user_id, csrf, stamp)
 
     def refresh_directory(self, force=False):
         cfg = directory_config(self.store)
@@ -254,12 +306,20 @@ class AuthService:
             row = s.get(Setting, "directory_sync")
             last = row.value.get("last_sync", 0) if row else 0
         if force or time.time() - last > cfg["sync_ttl"]:
-            with _sync_lock:
+            if not _sync_lock.acquire(timeout=2):
+                raise DomainError(
+                    "directory_sync_busy",
+                    "Dizin güncelleniyor. Kısa süre sonra tekrar deneyin.",
+                    503,
+                )
+            try:
                 with self.store.cs() as s:
                     row = s.get(Setting, "directory_sync")
                     last = row.value.get("last_sync", 0) if row else 0
                 if force or time.time() - last > cfg["sync_ttl"]:
                     return synchronize(self.store, self.client_factory)
+            finally:
+                _sync_lock.release()
         return {"last_sync": last}
 
     def actor(self, token, touch=True):
@@ -285,11 +345,12 @@ class AuthService:
             if not user or not user.active:
                 raise DomainError("session_invalid", "Oturum geçerli değil.", 401)
             user_id, csrf, source = user.id, session.csrf_token, user.source
-            if touch:
+            authenticated_at = session.expires_at - 28800
+            if touch and session.last_seen < stamp - 30:
                 session.last_seen = stamp
         if source == "ldap":
             self.refresh_directory()
-        return actor_for_user(self.store, user_id, csrf)
+        return actor_for_user(self.store, user_id, csrf, authenticated_at)
 
     def logout(self, token):
         if token:
@@ -308,22 +369,35 @@ class AuthService:
                 "Kurumsal parolanız Active Directory üzerinden yönetilir.",
                 403,
             )
-        if len(new) < 12 or new.casefold() in {"admin", "password1234"}:
-            raise DomainError("weak_password", "Yeni parola en az 12 karakter olmalı.")
-        with self.store.cs() as s:
-            user = s.get(DirectoryUser, actor.id)
-            try:
-                passwords.verify(user.password_hash, current)
-            except VerificationError:
-                raise DomainError("invalid_password", "Mevcut parola hatalı.", 403)
-            user.password_hash = passwords.hash(new)
-            user.temporary_password = False
-            s.execute(delete(AuthSession).where(AuthSession.user_id == actor.id))
-            s.add(
-                ControlEvent(
-                    profile_id=actor.id, action="local_password_changed", detail={}
-                )
+        from .throttle import reserve, refund
+
+        key = reserve(self.store, "password-change", actor.id, 5, 900)
+        if not strong_password(new):
+            raise DomainError(
+                "weak_password",
+                "Yeni parola 15–128 karakter olmalı; tekrarlı, yaygın veya kullanıcı adını içeren bir parola kullanmayın.",
             )
+        with password_capacity():
+            with self.store.cs() as s:
+                user = s.get(DirectoryUser, actor.id)
+                try:
+                    passwords.verify(user.password_hash, current)
+                except VerificationError:
+                    raise DomainError("invalid_password", "Mevcut parola hatalı.", 403)
+                user.password_hash = passwords.hash(new)
+                user.temporary_password = False
+                policy = s.get(Setting, "local_password_policy")
+                if policy:
+                    policy.value = {"version": 2}
+                else:
+                    s.add(Setting(key="local_password_policy", value={"version": 2}))
+                s.execute(delete(AuthSession).where(AuthSession.user_id == actor.id))
+                s.add(
+                    ControlEvent(
+                        profile_id=actor.id, action="local_password_changed", detail={}
+                    )
+                )
+        refund(self.store, key)
 
 
 def current_actor():
@@ -351,27 +425,29 @@ def install_auth(app, store, auth):
         password: str = Field(min_length=1, max_length=1024)
 
     class PasswordInput(BaseModel):
-        current_password: str
-        new_password: str = Field(min_length=12, max_length=1024)
+        current_password: str = Field(max_length=1024)
+        new_password: str = Field(min_length=15, max_length=128)
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
         reset = None
         try:
             if request.url.path.startswith("/api/"):
-                origin = request.headers.get("origin")
-                public = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
-                allowed = {str(request.base_url).rstrip("/")}
-                if public:
-                    allowed.add(public)
-                if origin and origin not in allowed:
+                name = cookie_name(store.settings)
+                if (
+                    sum(
+                        part.strip().partition("=")[0] == name
+                        for part in request.headers.get("cookie", "").split(";")
+                    )
+                    > 1
+                ):
                     raise DomainError(
-                        "origin_denied", "İstek kaynağı doğrulanamadı.", 403
+                        "ambiguous_cookie", "Oturum çerezi geçersiz.", 400
                     )
                 if request.url.path != "/api/v1/auth/login":
                     actor = await run_in_threadpool(
                         auth.actor,
-                        request.cookies.get(COOKIE),
+                        request.cookies.get(name),
                         request.headers.get("x-background-request") != "1",
                     )
                     if request.method not in ["GET", "HEAD", "OPTIONS"]:
@@ -379,6 +455,47 @@ def install_auth(app, store, auth):
                     reset = actor_context.set(actor)
                     request.state.actor = actor
                     path = request.url.path
+                    critical = (
+                        (path == "/api/v1/admin/directory" and request.method == "PUT")
+                        or path.startswith("/api/v1/admin/service-bindings/")
+                        or (
+                            path.startswith("/api/v1/admin/directory/changes/")
+                            and path.endswith("/approve")
+                        )
+                    )
+                    if critical and time.time() - actor.authenticated_at > 900:
+                        raise DomainError(
+                            "reauthentication_required",
+                            "Bu hassas işlem için yeniden giriş yapın.",
+                            401,
+                        )
+                    from .throttle import reserve
+
+                    reserve(
+                        store,
+                        (
+                            "api-reads"
+                            if request.method in ["GET", "HEAD"]
+                            else "api-writes"
+                        ),
+                        actor.id,
+                        600 if request.method in ["GET", "HEAD"] else 120,
+                        60,
+                    )
+                    if request.method not in ["GET", "HEAD", "OPTIONS"]:
+                        if path == "/api/v1/exports":
+                            reserve(store, "exports", actor.id, 5, 600)
+                            reserve(store, "exports-global", "all", 100, 600)
+                        elif path == "/api/v1/campaigns":
+                            reserve(store, "campaign-create", actor.id, 10, 3600)
+                        elif path.endswith(
+                            ("/evaluation-runs", "/retry-failed", "/generate-questions")
+                        ):
+                            reserve(store, "llm-jobs", actor.id, 10, 3600)
+                        elif path.startswith("/api/v1/admin/"):
+                            reserve(store, "admin-operations", actor.id, 60, 60)
+                            if path.endswith(("/test", "/sync")):
+                                reserve(store, "integration-tests", actor.id, 10, 60)
                     if path.startswith("/api/v1/admin/") and not actor.integrations:
                         raise DomainError(
                             "forbidden", "Entegrasyon yönetimi yetkisi gerekli.", 403
@@ -425,7 +542,35 @@ def install_auth(app, store, auth):
                             403,
                         )
             response = await call_next(request)
+            if (
+                request.url.path.startswith("/api/")
+                and request.method not in ["GET", "HEAD", "OPTIONS"]
+                and response.status_code < 400
+            ):
+                from .audit import record
+
+                route = request.scope.get("route")
+                record(
+                    store,
+                    "sensitive_operation",
+                    actor_id=getattr(getattr(request.state, "actor", None), "id", ""),
+                    kind=getattr(route, "path", "unknown"),
+                    method=request.method,
+                    status=response.status_code,
+                    target_id=next(iter(request.path_params.values()), ""),
+                )
         except DomainError as exc:
+            from .audit import record
+
+            record(
+                store,
+                "request_denied",
+                "denied",
+                actor_id=getattr(getattr(request.state, "actor", None), "id", ""),
+                reason=exc.code,
+                method=request.method,
+                status=exc.status,
+            )
             response = JSONResponse(
                 status_code=exc.status,
                 content={"code": exc.code, "message": exc.message},
@@ -452,9 +597,9 @@ def install_auth(app, store, auth):
         token, actor = auth.login(
             p.username, p.password, request.client.host if request.client else "unknown"
         )
-        auth.logout(request.cookies.get(COOKIE))
+        auth.logout(request.cookies.get(cookie_name(store.settings)))
         response.set_cookie(
-            COOKIE,
+            cookie_name(store.settings),
             token,
             httponly=True,
             secure=not store.settings.demo,
@@ -470,9 +615,9 @@ def install_auth(app, store, auth):
 
     @app.post("/api/v1/auth/logout")
     def logout(request: Request, response: Response):
-        auth.logout(request.cookies.get(COOKIE))
+        auth.logout(request.cookies.get(cookie_name(store.settings)))
         response.delete_cookie(
-            COOKIE,
+            cookie_name(store.settings),
             path="/",
             secure=not store.settings.demo,
             httponly=True,
@@ -483,5 +628,11 @@ def install_auth(app, store, auth):
     @app.post("/api/v1/auth/password")
     def change(p: PasswordInput, response: Response):
         auth.change_password(current_actor(), p.current_password, p.new_password)
-        response.delete_cookie(COOKIE, path="/")
+        response.delete_cookie(
+            cookie_name(store.settings),
+            path="/",
+            secure=not store.settings.demo,
+            httponly=True,
+            samesite="lax",
+        )
         return {"status": "signed_out"}

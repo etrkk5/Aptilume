@@ -5,18 +5,31 @@ import { ThemeSwitch } from "./theme";
 export function useIdentity() {
   const [user, setUser] = useState<any>(undefined);
   useEffect(() => {
-    api("/auth/me")
-      .then((u) => {
-        setCsrf(u.csrf_token);
-        setUser(u);
-      })
-      .catch(() => setUser(null));
+    const load = () =>
+      api("/auth/me")
+        .then((u) => {
+          setCsrf(u.csrf_token);
+          setUser(u);
+        })
+        .catch(() => setUser(null));
+    load();
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setUser(undefined);
+        setCsrf("");
+        load();
+      }
+    };
+    window.addEventListener("pageshow", restore);
     const expired = () => {
       setCsrf("");
       setUser(null);
     };
     window.addEventListener("aptilume:unauthorized", expired);
-    return () => window.removeEventListener("aptilume:unauthorized", expired);
+    return () => {
+      window.removeEventListener("aptilume:unauthorized", expired);
+      window.removeEventListener("pageshow", restore);
+    };
   }, []);
   return {
     user,

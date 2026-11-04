@@ -1,0 +1,72 @@
+name: Security and verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_MODE: test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install verification tools
+        run: python -m pip install -r requirements-dev.txt -r requirements-security.txt
+      - name: Tests
+        run: python -m pytest
+      - name: Python vulnerability audit
+        run: pip-audit --no-deps --disable-pip -r requirements.lock.txt
+      - name: Static security analysis
+        run: bandit -r backend/app -ll -ii
+      - name: Install web dependencies
+        working-directory: web
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Web vulnerability audit
+        working-directory: web
+        run: pnpm audit --audit-level=low
+      - name: Web production build
+        working-directory: web
+        run: pnpm build
+      - name: Build deployment image
+        run: docker build -t aptilume:verify .
+      - name: Production defaults fail closed
+        run: |
+          if docker run --rm aptilume:verify bootstrap; then
+            echo 'Production unexpectedly accepted missing secrets.'
+            exit 1
+          fi
+      - name: Scan deployment image without uploading it
+        run: |
+          mkdir -p work
+          docker image save -o work/ci-image.tar aptilume:verify
+          docker run --rm -v "$PWD/work:/scan" aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --input /scan/ci-image.tar --scanners vuln --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 --no-progress
+      - name: PostgreSQL integration and control-store security
+        run: |
+          docker network create aptilume-ci-verify
+          docker run -d --name aptilume-postgres-verify --network aptilume-ci-verify -e POSTGRES_DB=aptilume_fixture -e POSTGRES_PASSWORD=fixture-only postgres:16-alpine
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if docker exec aptilume-postgres-verify pg_isready -U postgres -d aptilume_fixture; then break; fi
+            sleep 1
+          done
+          docker run --rm --network aptilume-ci-verify -e TEST_DB_HOST=aptilume-postgres-verify -v "$PWD/tests/check_postgres.py:/tmp/check_postgres.py:ro" --entrypoint python aptilume:verify /tmp/check_postgres.py
+      - name: Remove test resources
+        if: always()
+        run: |
+          docker rm -f -v aptilume-postgres-verify || true
+          docker network rm aptilume-ci-verify || true

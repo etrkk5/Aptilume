@@ -15,8 +15,16 @@ from ldap3 import (
 )
 from ldap3.core.exceptions import LDAPException, LDAPBindError
 from ldap3.utils.conv import escape_filter_chars
-from sqlalchemy import select
-from .models import Setting, DirectoryUser, Participant, Team, uid, ControlEvent
+from sqlalchemy import select, update
+from .models import (
+    Setting,
+    DirectoryUser,
+    Participant,
+    Team,
+    uid,
+    ControlEvent,
+    DirectoryChange,
+)
 from .store import DomainError
 
 DEFAULT_DIRECTORY = {
@@ -50,11 +58,20 @@ def directory_config(store, secret=False):
     config["has_secret"] = bool(encrypted)
     if secret:
         config["password"] = store.decrypt(encrypted)
+        config["_network_policy"] = {
+            "production": not store.settings.demo,
+            "allowed": store.settings.allowed_directory_hosts,
+            "cidrs": store.settings.allowed_cidrs,
+        }
     return config
 
 
-def save_directory_config(store, data):
-    current = directory_config(store, secret=True)
+def _prepare_directory_config(store, data, base=None):
+    current = base or directory_config(store, secret=True)
+    if not isinstance(data, dict) or any(len(str(v)) > 65536 for v in data.values()):
+        raise DomainError("invalid_directory", "Dizin yapılandırması geçersiz.")
+    if "encrypted_password" in data and not isinstance(data.get("password"), str):
+        raise DomainError("invalid_directory", "Şifreli alan doğrudan değiştirilemez.")
     config = {k: v for k, v in data.items() if k in DEFAULT_DIRECTORY}
     config = {**{k: v for k, v in current.items() if k in DEFAULT_DIRECTORY}, **config}
     for key, default in DEFAULT_DIRECTORY.items():
@@ -65,6 +82,8 @@ def save_directory_config(store, data):
             raise DomainError("invalid_directory", "Dizin alanları metin olmalı.")
         if isinstance(value, str):
             config[key] = value.strip()
+            if len(config[key]) > (4096 if key == "ca_file" else 2048):
+                raise DomainError("invalid_directory", "Dizin alanı çok uzun.")
     if any(
         not isinstance(config[k], int) or isinstance(config[k], bool)
         for k in ["port", "sync_ttl"]
@@ -83,9 +102,8 @@ def save_directory_config(store, data):
         raise DomainError(
             "invalid_directory", "LDAP bağlantısı LDAPS veya StartTLS kullanmalı."
         )
-    if (
-        not 1 <= int(config["port"]) <= 65535
-        or not 60 <= int(config["sync_ttl"]) <= 3600
+    if not 1 <= int(config["port"]) <= 65535 or not 60 <= int(config["sync_ttl"]) <= (
+        3600 if store.settings.demo else 300
     ):
         raise DomainError("invalid_directory", "Port veya yenileme süresi geçersiz.")
     for key in [k for k in config if k.endswith("_attribute")]:
@@ -98,6 +116,16 @@ def save_directory_config(store, data):
         for v in config["role_groups"].values()
     ):
         raise DomainError("invalid_directory", "Grup DN değerleri liste olmalı.")
+    if (
+        any(
+            len(groups) > 20 or any(len(group) > 2048 for group in groups)
+            for groups in config["role_groups"].values()
+        )
+        or len(config["department_map"]) > 1000
+    ):
+        raise DomainError(
+            "invalid_directory", "Grup veya departman eşleme sınırı aşıldı."
+        )
     config["role_groups"] = {
         role: [group.strip() for group in groups if group.strip()]
         for role, groups in config["role_groups"].items()
@@ -107,6 +135,8 @@ def save_directory_config(store, data):
         if data.get("clear_secret")
         else data.get("password") or current.get("password")
     )
+    if password is not None and (not isinstance(password, str) or len(password) > 4096):
+        raise DomainError("invalid_directory", "Servis parolası geçersiz.")
     if (
         current.get("has_secret")
         and any(config[k] != current.get(k) for k in ["host", "port", "bind_dn"])
@@ -132,32 +162,163 @@ def save_directory_config(store, data):
         raise DomainError(
             "invalid_directory", "Sunucu alanına yalnızca host adını yazın."
         )
-    config["encrypted_password"] = store.encrypt(password)
-    with store.cs() as s:
-        row = s.get(Setting, "directory")
-        if row:
-            row.value = config
-        else:
-            s.add(Setting(key="directory", value=config))
-        state = s.get(Setting, "directory_sync")
-        if state:
-            state.value = {"last_sync": 0}
-        from sqlalchemy import delete
-        from .models import AuthSession
+    if not store.settings.demo and config["host"]:
+        from .network import hostname, permitted_host
 
-        ldap_users = list(
-            s.scalars(select(DirectoryUser.id).where(DirectoryUser.source == "ldap"))
+        hostname(config["host"])
+        permitted_host(
+            config["host"], config["port"], store.settings.allowed_directory_hosts
         )
-        if ldap_users:
-            s.execute(delete(AuthSession).where(AuthSession.user_id.in_(ldap_users)))
-        s.add(
-            ControlEvent(
-                profile_id="directory",
-                action="directory_configured",
-                detail={"enabled": config["enabled"]},
+        if config["enabled"] and not config["role_groups"].get("hr"):
+            raise DomainError(
+                "missing_hr_group", "Üretimde en az bir İK grubu DN tanımlanmalı."
+            )
+    config["encrypted_password"] = store.encrypt(password)
+    return config
+
+
+def _apply_directory_config(s, config):
+    row = s.get(Setting, "directory")
+    if row:
+        row.value = config
+    else:
+        s.add(Setting(key="directory", value=config))
+    state = s.get(Setting, "directory_sync")
+    if state:
+        state.value = {"last_sync": 0}
+    from sqlalchemy import delete
+    from .models import AuthSession
+
+    ldap_users = list(
+        s.scalars(select(DirectoryUser.id).where(DirectoryUser.source == "ldap"))
+    )
+    if ldap_users:
+        s.execute(delete(AuthSession).where(AuthSession.user_id.in_(ldap_users)))
+    s.add(
+        ControlEvent(
+            profile_id="directory",
+            action="directory_configured",
+            detail={"enabled": config["enabled"]},
+        )
+    )
+
+
+def save_directory_config(store, data):
+    config = _prepare_directory_config(store, data)
+    with store.cs() as s:
+        _apply_directory_config(s, config)
+    return directory_config(store)
+
+
+def directory_protected(store):
+    with store.cs() as s:
+        return bool(
+            s.get(Setting, "directory_initialized")
+            or s.scalar(
+                select(DirectoryUser.id).where(DirectoryUser.source == "ldap").limit(1)
             )
         )
-    return directory_config(store)
+
+
+def public_change(change):
+    config = {
+        key: value
+        for key, value in change.config.items()
+        if key != "encrypted_password"
+    }
+    return {
+        "id": change.id,
+        "config": {
+            **config,
+            "has_secret": bool(change.config.get("encrypted_password")),
+        },
+        "requested_by": change.requested_by,
+        "created_at": change.created_at,
+        "status": change.status,
+    }
+
+
+def propose_directory_change(store, data, actor):
+    from .audit import record
+
+    if actor.hr or not directory_protected(store):
+        config = _prepare_directory_config(store, data)
+        with store.cs() as s:
+            _apply_directory_config(s, config)
+            s.execute(
+                update(DirectoryChange)
+                .where(DirectoryChange.status == "pending")
+                .values(status="superseded")
+            )
+        record(store, "directory_policy_applied", actor_id=actor.id)
+        return {**directory_config(store), "status": "applied"}
+    base = None
+    with store.cs() as s:
+        previous = s.scalar(
+            select(DirectoryChange)
+            .where(
+                DirectoryChange.status == "pending",
+                DirectoryChange.requested_by == actor.id,
+            )
+            .order_by(DirectoryChange.created_at.desc())
+            .limit(1)
+        )
+        if previous:
+            base = {
+                **previous.config,
+                "password": store.decrypt(previous.config.get("encrypted_password")),
+                "has_secret": bool(previous.config.get("encrypted_password")),
+            }
+    config = _prepare_directory_config(store, data, base)
+    with store.cs() as s:
+        s.execute(
+            update(DirectoryChange)
+            .where(DirectoryChange.status == "pending")
+            .values(status="superseded")
+        )
+        change = DirectoryChange(config=config, requested_by=actor.id)
+        s.add(change)
+        s.flush()
+        result = public_change(change)
+    record(
+        store, "directory_change_proposed", actor_id=actor.id, change_id=result["id"]
+    )
+    return {"status": "pending_approval", "change": result}
+
+
+def approve_directory_change(store, change_id, actor):
+    if not actor.hr:
+        raise DomainError(
+            "forbidden", "AD güven politikasını uygulamak için İK yetkisi gerekli.", 403
+        )
+    with store.cs() as s:
+        change = s.get(DirectoryChange, change_id)
+        if not change or change.status != "pending":
+            raise DomainError(
+                "change_conflict", "Değişiklik bekleyen durumda değil.", 409
+            )
+        data = {
+            **{k: v for k, v in change.config.items() if k != "encrypted_password"},
+            "password": store.decrypt(change.config.get("encrypted_password")),
+        }
+    config = _prepare_directory_config(store, data)
+    with store.cs() as s:
+        changed = s.execute(
+            update(DirectoryChange)
+            .where(DirectoryChange.id == change_id, DirectoryChange.status == "pending")
+            .values(status="approved", approved_by=actor.id)
+        )
+        if changed.rowcount != 1:
+            raise DomainError(
+                "change_conflict",
+                "Değişiklik başka bir yetkili tarafından işlendi.",
+                409,
+            )
+        _apply_directory_config(s, config)
+    from .audit import record
+
+    record(store, "directory_change_approved", actor_id=actor.id, change_id=change_id)
+    return {"status": "applied"}
 
 
 def _first(value):
@@ -180,13 +341,32 @@ class DirectoryClient:
                 "Active Directory bağlantı bilgileri tamamlanmamış.",
                 503,
             )
+        host = c["host"]
+        policy = c.get("_network_policy", {})
+        if policy.get("production"):
+            from .network import resolve_target
+
+            host = resolve_target(
+                c["host"],
+                int(c["port"]),
+                policy["allowed"],
+                policy["cidrs"],
+                standard_port=636 if c["transport"] == "ldaps" else 389,
+            )[0]
         tls = Tls(
             validate=ssl.CERT_REQUIRED,
             ca_certs_file=c.get("ca_file") or None,
             valid_names=[c["host"]],
+            sni=c["host"],
+            ssl_options=[
+                ssl.OP_NO_SSLv2,
+                ssl.OP_NO_SSLv3,
+                ssl.OP_NO_TLSv1,
+                ssl.OP_NO_TLSv1_1,
+            ],
         )
         server = Server(
-            c["host"],
+            host,
             port=int(c["port"]),
             use_ssl=c["transport"] == "ldaps",
             tls=tls,
@@ -324,16 +504,27 @@ class DirectoryClient:
     def snapshot(self):
         try:
             with self.service() as conn:
+                from itertools import islice
+
                 rows = list(
-                    conn.extend.standard.paged_search(
-                        self.config["base_dn"],
-                        "(&(objectCategory=person)(objectClass=user))",
-                        SUBTREE,
-                        attributes=self.attributes,
-                        paged_size=500,
-                        generator=True,
+                    islice(
+                        conn.extend.standard.paged_search(
+                            self.config["base_dn"],
+                            "(&(objectCategory=person)(objectClass=user))",
+                            SUBTREE,
+                            attributes=self.attributes,
+                            paged_size=500,
+                            generator=True,
+                        ),
+                        10001,
                     )
                 )
+                if len(rows) > 10000:
+                    raise DomainError(
+                        "directory_limit",
+                        "Dizin 10.000 kayıt sınırını aşıyor. Base DN kapsamını daraltın.",
+                        503,
+                    )
                 if conn.result.get("result", 0) != 0:
                     raise DomainError(
                         "incomplete_directory", "Dizin sorgusu tamamlanamadı.", 503
@@ -342,24 +533,45 @@ class DirectoryClient:
                     self.convert(r) for r in rows if r.get("type") == "searchResEntry"
                 ]
                 managers = {u["manager_dn"] for u in users if u["manager_dn"]}
-                for user in users:
-                    roles = []
-                    for role, groups in self.config["role_groups"].items():
-                        for group in groups:
-                            matched = group.casefold() in {
-                                g.casefold() for g in user["groups"]
-                            }
-                            if not matched and self.config.get("nested_groups"):
-                                conn.search(
-                                    user["dn"],
-                                    f"(memberOf:1.2.840.113556.1.4.1941:={escape_filter_chars(group)})",
-                                    BASE,
-                                    attributes=[self.config["guid_attribute"]],
+                membership = {role: set() for role in self.config["role_groups"]}
+                for role, groups in self.config["role_groups"].items():
+                    for group in groups:
+                        membership[role].update(
+                            u["dn"]
+                            for u in users
+                            if group.casefold() in {g.casefold() for g in u["groups"]}
+                        )
+                        if self.config.get("nested_groups"):
+                            nested = list(
+                                islice(
+                                    conn.extend.standard.paged_search(
+                                        self.config["base_dn"],
+                                        f"(&(objectCategory=person)(objectClass=user)(memberOf:1.2.840.113556.1.4.1941:={escape_filter_chars(group)}))",
+                                        SUBTREE,
+                                        attributes=[self.config["guid_attribute"]],
+                                        paged_size=500,
+                                        generator=True,
+                                    ),
+                                    10001,
                                 )
-                                matched = bool(conn.entries)
-                            if matched:
-                                roles.append(role)
-                                break
+                            )
+                            if len(nested) > 10000 or conn.result.get("result", 0) != 0:
+                                raise DomainError(
+                                    "incomplete_directory",
+                                    "Grup üyelikleri tamamlanamadı.",
+                                    503,
+                                )
+                            membership[role].update(
+                                row["dn"].casefold()
+                                for row in nested
+                                if row.get("type") == "searchResEntry"
+                            )
+                for user in users:
+                    roles = [
+                        role
+                        for role, members in membership.items()
+                        if user["dn"] in members
+                    ]
                     if "hr" in roles:
                         user["roles"] = ["hr"]
                     elif "admin" in roles:
@@ -382,6 +594,16 @@ def synchronize(store, client_factory=DirectoryClient):
             "directory_disabled", "Active Directory bağlantısı henüz etkin değil.", 503
         )
     users = client_factory(config).snapshot()
+    if (
+        not store.settings.demo
+        and not directory_protected(store)
+        and not any(u["active"] and "hr" in u["roles"] for u in users)
+    ):
+        raise DomainError(
+            "missing_hr_identity",
+            "İlk eşitlemede İK grubundan en az bir etkin hesap gerekli.",
+            503,
+        )
     by_dn = {u["dn"]: u for u in users}
     if (
         len(by_dn) != len(users)
@@ -443,6 +665,8 @@ def synchronize(store, client_factory=DirectoryClient):
             mapping[user["id"]] = participant.id
     stamp = time.time()
     with store.cs() as s:
+        if users and not s.get(Setting, "directory_initialized"):
+            s.add(Setting(key="directory_initialized", value={"initialized_at": stamp}))
         for existing in s.scalars(
             select(DirectoryUser).where(DirectoryUser.source == "ldap")
         ):

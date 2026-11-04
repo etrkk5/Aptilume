@@ -126,7 +126,7 @@ export function AccountPanel({
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={12}
+                minLength={15}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -142,7 +142,8 @@ export function AccountPanel({
 export function DirectorySettings({ action, busy }: any) {
   const [config, setConfig] = useState<any>(null),
     [open, setOpen] = useState(false),
-    [result, setResult] = useState<any>(null);
+    [result, setResult] = useState<any>(null),
+    [review, setReview] = useState(false);
   const load = () =>
     api("/admin/directory").then((c) => setConfig({ ...c, password: "" }));
   useEffect(() => {
@@ -189,7 +190,18 @@ export function DirectorySettings({ action, busy }: any) {
           </b>
         </div>
         <div className="directory-actions">
-          <Button secondary onClick={() => setOpen(true)}>
+          <Button
+            secondary
+            onClick={() => {
+              if (config.pending_change)
+                setConfig({
+                  ...config,
+                  ...config.pending_change.config,
+                  password: "",
+                });
+              setOpen(true);
+            }}
+          >
             Bağlantıyı düzenle
           </Button>
           <Button
@@ -226,6 +238,23 @@ export function DirectorySettings({ action, busy }: any) {
           </Button>
         </div>
       </div>
+      {config.approval_required && (
+        <div className="notice" style={{ margin: "0 26px 20px" }}>
+          AD değişiklikleriniz aktif bağlantıyı değiştirmeden İK onayına
+          gönderilir.
+        </div>
+      )}
+      {config.pending_change && (
+        <div className="directory-pending">
+          <div>
+            <b>AD değişikliği onay bekliyor</b>
+            <p>Aktif kimlik ve yetki politikası henüz değiştirilmedi.</p>
+          </div>
+          <Button secondary onClick={() => setReview(true)}>
+            Öneriyi incele
+          </Button>
+        </div>
+      )}
       {result && (
         <div className="directory-result" role="status">
           <CheckCircle2 size={16} />
@@ -244,11 +273,17 @@ export function DirectorySettings({ action, busy }: any) {
             className="modal-body"
             onSubmit={async (e) => {
               e.preventDefault();
-              const r = await action(
-                () => api("/admin/directory", "PUT", config),
-                "AD ayarları kaydedildi.",
+              const r = await action(() =>
+                api("/admin/directory", "PUT", config),
               );
               if (r) {
+                setResult({
+                  status: "success",
+                  message:
+                    r.status === "pending_approval"
+                      ? "Değişiklik İK onayına gönderildi. Aktif ayarlar korundu."
+                      : "AD ayarları uygulandı.",
+                });
                 setOpen(false);
                 load();
               }
@@ -394,10 +429,176 @@ export function DirectorySettings({ action, busy }: any) {
               />
               Active Directory girişini etkinleştir
             </label>
-            <Button disabled={busy}>Ayarları kaydet</Button>
+            <Button disabled={busy}>
+              {config.approval_required
+                ? "İK onayına gönder"
+                : "Ayarları kaydet"}
+            </Button>
           </form>
         </Modal>
       )}
+      {review && config.pending_change && (
+        <Modal
+          title="AD değişikliği incelemesi"
+          onClose={() => setReview(false)}
+        >
+          <div className="modal-body">
+            <p className="muted">
+              Değişiklik uygulandığında kurumsal oturumlar kapatılır. Grup,
+              kalıcı kimlik ve yönetici alanlarını kontrol edin.
+            </p>
+            <dl className="report-info">
+              {Object.entries(config.pending_change.config)
+                .filter(([key]) => key !== "has_secret")
+                .map(([key, value]) => (
+                  <React.Fragment key={key}>
+                    <dt>
+                      {(
+                        {
+                          host: "Sunucu",
+                          port: "Port",
+                          base_dn: "Base DN",
+                          bind_dn: "Servis hesabı",
+                          role_groups: "Rol grupları",
+                          manager_attribute: "Yönetici alanı",
+                          guid_attribute: "Kalıcı kimlik",
+                          enabled: "Etkin",
+                          transport: "TLS türü",
+                        } as any
+                      )[key] || key}
+                    </dt>
+                    <dd className="policy-value">
+                      {typeof value === "object"
+                        ? JSON.stringify(value, null, 2)
+                        : String(value)}
+                    </dd>
+                  </React.Fragment>
+                ))}
+              <dt>Gizli değer</dt>
+              <dd>
+                {config.pending_change.config.has_secret
+                  ? "Şifreli olarak kayıtlı"
+                  : "Girilmiyor"}
+              </dd>
+            </dl>
+            {config.can_approve ? (
+              <div className="modal-actions">
+                <Button
+                  secondary
+                  disabled={busy}
+                  onClick={async () => {
+                    if (
+                      await action(
+                        () =>
+                          api(
+                            "/admin/directory/changes/" +
+                              config.pending_change.id +
+                              "/reject",
+                            "POST",
+                          ),
+                        "Öneri reddedildi.",
+                      )
+                    ) {
+                      setReview(false);
+                      load();
+                    }
+                  }}
+                >
+                  Reddet
+                </Button>
+                <Button
+                  disabled={busy}
+                  onClick={async () => {
+                    if (
+                      await action(
+                        () =>
+                          api(
+                            "/admin/directory/changes/" +
+                              config.pending_change.id +
+                              "/approve",
+                            "POST",
+                          ),
+                        "AD değişikliği uygulandı. Yeniden giriş yapın.",
+                      )
+                    ) {
+                      setReview(false);
+                      load();
+                    }
+                  }}
+                >
+                  Onayla ve uygula
+                </Button>
+              </div>
+            ) : (
+              <div className="notice">
+                Bu değişikliği İK yetkisine sahip bir kullanıcı uygulayabilir.
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </section>
+  );
+}
+
+export function SecurityEvents() {
+  const [events, setEvents] = useState<any[]>([]),
+    [error, setError] = useState("");
+  const load = () =>
+    api("/admin/security-events?limit=50")
+      .then(setEvents)
+      .catch((e) => setError(e.message));
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <section className="panel security-events">
+      <div className="panel-head">
+        <div>
+          <h2>Güvenlik olayları</h2>
+          <p>Son 50 olay · parola, anahtar ve yanıt metni kaydedilmez</p>
+        </div>
+        <Button secondary onClick={load}>
+          <RefreshCw size={15} />
+          Yenile
+        </Button>
+      </div>
+      {error && <div className="notice error">{error}</div>}
+      <table>
+        <thead>
+          <tr>
+            <th>Zaman</th>
+            <th>İşlem</th>
+            <th>Sonuç</th>
+            <th>İstek kimliği</th>
+          </tr>
+        </thead>
+        <tbody>
+          {events.map((e) => (
+            <tr key={e.id}>
+              <td>{new Date(e.created_at).toLocaleString("tr-TR")}</td>
+              <td>
+                {e.event}
+                <small className="cell-subtitle">
+                  {e.detail.reason || e.detail.kind || e.actor_id}
+                </small>
+              </td>
+              <td>
+                {(
+                  {
+                    success: "Başarılı",
+                    denied: "Reddedildi",
+                    error: "Hata",
+                  } as any
+                )[e.outcome] || e.outcome}
+              </td>
+              <td>
+                <small>{e.correlation_id || "Arka plan işlemi"}</small>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </section>
   );
 }

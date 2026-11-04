@@ -53,6 +53,7 @@ import {
   DevelopmentPlans,
   Comparison,
   PersonalProfile,
+  SecurityEvents,
 } from "./product-ui";
 echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -184,7 +185,7 @@ function App() {
         setUser(b.identity);
         return;
       }
-      setBoot(b);
+      setBoot({ ...b, _viewerKey: key });
       setSelected(
         (prev) =>
           (b.campaigns.some((c: Any) => c.id === prev) ? prev : "") ||
@@ -193,8 +194,14 @@ function App() {
           "",
       );
       if (b.degraded) {
-        setView("connections");
-        setError(b.message);
+        setReport(null);
+        setDetail(null);
+        setView(user.permissions.integrations ? "connections" : "profile");
+        setError(
+          user.permissions.integrations
+            ? b.message
+            : "Veri deposu şu anda kullanılamıyor. İK veya entegrasyon yöneticisine başvurun.",
+        );
       } else setError("");
     } catch (e: Any) {
       setError(e.message);
@@ -278,7 +285,7 @@ function App() {
       </div>
     );
   if (!user) return <Login onLogin={signIn} />;
-  if (!boot)
+  if (!boot || boot._viewerKey !== identityKey.current)
     return (
       <div className="startup">
         <img
@@ -566,7 +573,13 @@ function App() {
           {view === "connections" && (
             <>
               <DirectorySettings action={action} busy={busy} />
-              <Connections action={action} notify={notify} />
+              <Connections
+                action={action}
+                notify={notify}
+                user={user}
+                security={boot.security}
+              />
+              {user.permissions.all_data && <SecurityEvents />}
             </>
           )}
           {view === "development" && (
@@ -577,7 +590,7 @@ function App() {
               onEdit={setActionDraft}
             />
           )}
-          {view === "profile" && (
+          {view === "profile" && !boot.degraded && (
             <PersonalProfile user={user} onSurvey={() => setView("survey")} />
           )}
           <footer>
@@ -781,7 +794,7 @@ function Dashboard({
   ];
   const bar = {
     grid: { left: 35, right: 20, top: 25, bottom: 35 },
-    tooltip: { trigger: "axis" },
+    tooltip: { trigger: "axis", renderMode: "richText" },
     xAxis: {
       type: "category",
       data: teamNames.map((x) => x.replace(" & ", "\n& ")),
@@ -2124,8 +2137,14 @@ function Jobs({ action, notify }: Any) {
                       placeholder="Kararınızın gerekçesini yazın"
                     />
                   </label>
+                  {r.can_review === false && (
+                    <div className="notice">
+                      Kendi yanıtınızı onaylayamazsınız. Başka bir yetkili
+                      incelemeli.
+                    </div>
+                  )}
                   <Button
-                    disabled={reason.length < 5}
+                    disabled={reason.length < 5 || r.can_review === false}
                     onClick={async () => {
                       if (
                         await action(
@@ -2162,7 +2181,7 @@ function Jobs({ action, notify }: Any) {
   );
 }
 
-function Connections({ action, notify }: Any) {
+function Connections({ action, notify, user, security }: Any) {
   const [tab, setTab] = useState("llm"),
     [rows, setRows] = useState<Any[]>([]),
     [edit, setEdit] = useState<Any>(null),
@@ -2191,7 +2210,8 @@ function Connections({ action, notify }: Any) {
               port: 5432,
               database: "",
               username: "",
-              sslmode: "require",
+              sslmode: "verify-full",
+              sslrootcert: "",
               timeout: 10,
             },
       secret: "",
@@ -2282,7 +2302,7 @@ function Connections({ action, notify }: Any) {
                 <Trash2 size={16} />
               </button>
             </div>
-            {tab === "llm" ? (
+            {tab === "llm" && user.permissions.all_data ? (
               <div className="binding-controls">
                 <span>Görev için seç:</span>
                 {[
@@ -2307,7 +2327,9 @@ function Connections({ action, notify }: Any) {
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : tab === "db" &&
+              user.permissions.all_data &&
+              !security?.offline_database_migration ? (
               !p.active_for.length && (
                 <button
                   className="text-btn migration-btn"
@@ -2324,6 +2346,17 @@ function Connections({ action, notify }: Any) {
                   DB geçişini önizle <ArrowRight size={14} />
                 </button>
               )
+            ) : (
+              <p className="muted">
+                {tab === "llm"
+                  ? "Veri aktaracak görevleri İK etkinleştirir."
+                  : "Üretimde DB değişimi, API ve worker durdurularak işletim ekibi tarafından yapılır."}
+                {tab === "db" && (
+                  <small className="cell-subtitle">
+                    Profil kimliği: {p.id}
+                  </small>
+                )}
+              </p>
             )}
           </section>
         ))}
@@ -2516,6 +2549,14 @@ function Connections({ action, notify }: Any) {
                         <option>prefer</option>
                       </select>
                     </label>
+                    <label>
+                      Kurumsal DB CA dosyası
+                      <input
+                        value={edit.config.sslrootcert || ""}
+                        onChange={(e) => cfg("sslrootcert", e.target.value)}
+                        placeholder="/etc/certs/kurum-ca.pem"
+                      />
+                    </label>
                   </>
                 )}
               </>
@@ -2533,6 +2574,10 @@ function Connections({ action, notify }: Any) {
                 placeholder="Gizli değer"
               />
             </label>
+            <p className="muted">
+              Sunucu veya hesap değiştiğinde gizli değeri yeniden girin.
+              Üretimde DB için verify-full sertifika doğrulaması zorunludur.
+            </p>
             {edit.has_secret && (
               <label className="checkbox">
                 <input

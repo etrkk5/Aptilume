@@ -10,11 +10,18 @@ from .access import (
     require_business,
     require_manager,
     require_integrations,
+    require_hr,
     check_team,
     team_control,
     filter_snapshot,
 )
-from .directory import directory_config, save_directory_config
+from .directory import (
+    directory_config,
+    propose_directory_change,
+    approve_directory_change,
+    public_change,
+    directory_protected,
+)
 from .reporting import metrics
 
 
@@ -84,11 +91,61 @@ def install_product_routes(app, store):
         with store.cs() as s:
             state = s.get(Setting, "directory_sync")
             config["sync_status"] = state.value if state else {"last_sync": 0}
+            pending = s.scalar(
+                select(DirectoryChange)
+                .where(DirectoryChange.status == "pending")
+                .order_by(DirectoryChange.created_at.desc())
+                .limit(1)
+            )
+            config["pending_change"] = public_change(pending) if pending else None
+        config["approval_required"] = (
+            directory_protected(store) and not current_actor().hr
+        )
+        config["can_approve"] = current_actor().hr
         return config
 
     @app.put("/api/v1/admin/directory")
     def save_directory(p: dict):
-        return save_directory_config(store, p)
+        return propose_directory_change(store, p, require_integrations())
+
+    @app.post("/api/v1/admin/directory/changes/{change_id}/approve")
+    def approve_directory(change_id: str):
+        return approve_directory_change(store, change_id, require_hr())
+
+    @app.post("/api/v1/admin/directory/changes/{change_id}/reject")
+    def reject_directory(change_id: str):
+        actor = require_hr()
+        with store.cs() as s:
+            changed = s.execute(
+                update(DirectoryChange)
+                .where(
+                    DirectoryChange.id == change_id, DirectoryChange.status == "pending"
+                )
+                .values(status="rejected", approved_by=actor.id)
+            )
+            if changed.rowcount != 1:
+                raise DomainError(
+                    "change_conflict", "Değişiklik bekleyen durumda değil.", 409
+                )
+        from .audit import record
+
+        record(
+            store, "directory_change_rejected", actor_id=actor.id, change_id=change_id
+        )
+        return {"status": "rejected"}
+
+    @app.get("/api/v1/admin/security-events")
+    def security_events(limit: int = 50):
+        require_hr()
+        with store.cs() as s:
+            return [
+                asdict(item)
+                for item in s.scalars(
+                    select(SecurityEvent)
+                    .order_by(SecurityEvent.created_at.desc())
+                    .limit(max(1, min(limit, 200)))
+                )
+            ]
 
     @app.post("/api/v1/admin/directory/test")
     def test_directory():
@@ -109,6 +166,9 @@ def install_product_routes(app, store):
 
     @app.post("/api/v1/admin/directory/sync")
     def sync_directory():
+        from .throttle import reserve
+
+        reserve(store, "directory-sync", "all-admins", 2, 60)
         return app.state.auth.refresh_directory(force=True)
 
     @app.get("/api/v1/me/profile")

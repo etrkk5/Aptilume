@@ -63,7 +63,34 @@ class Store:
         else:
             raise RuntimeError("SECRET_ENCRYPTION_KEY gerekli")
         self.cipher = Fernet(key)
-        self.control = engine_for(settings.control_url)
+        control_url = settings.control_url
+        if not settings.demo and not str(control_url).startswith("sqlite"):
+            from sqlalchemy.engine import make_url
+            from .network import resolve_target
+
+            url = make_url(control_url)
+            if (
+                url.get_backend_name() != "postgresql"
+                or url.query.get("sslmode") != "verify-full"
+            ):
+                raise RuntimeError(
+                    "Üretim kontrol deposunda PostgreSQL verify-full TLS gerekli."
+                )
+            address = resolve_target(
+                url.host,
+                url.port or 5432,
+                settings.allowed_db_hosts,
+                settings.allowed_cidrs,
+                standard_port=5432,
+            )[0]
+            control_url = url.update_query_dict(
+                {
+                    "hostaddr": address,
+                    "connect_timeout": "10",
+                    "options": "-c statement_timeout=30000 -c lock_timeout=10000",
+                }
+            )
+        self.control = engine_for(control_url)
         ControlBase.metadata.create_all(self.control)
         self.control_session = sessionmaker(self.control, expire_on_commit=False)
         self._engine, self._binding_version = None, None
@@ -118,16 +145,22 @@ class Store:
         if self._binding_version != binding.version_id:
             if self._engine:
                 self._engine.dispose()
-            self._engine = engine_for(self.db_url(config, self.decrypt(secret)))
+            self._engine = engine_for(
+                self.db_url(config, self.decrypt(secret), connect=True)
+            )
             self._binding_version = binding.version_id
         return self._engine
 
-    def db_url(self, c, secret=None):
+    def db_url(self, c, secret=None, connect=False):
         from sqlalchemy.engine import URL
+        from .validation import connection_config
+        from .network import hostname, permitted_host, resolve_target
+
+        c = connection_config("db", c)
 
         if c.get("engine") == "sqlite":
             path = Path(
-                c.get("path", str(self.settings.data_dir / "application.db"))
+                c.get("path") or str(self.settings.data_dir / "application.db")
             ).resolve()
             if not path.is_relative_to(self.settings.data_dir):
                 raise DomainError(
@@ -135,10 +168,29 @@ class Store:
                 )
             return f"sqlite:///{path}"
         if c.get("engine") == "postgresql":
+            host = hostname(c["host"])
+            if not self.settings.demo:
+                if c["sslmode"] != "verify-full":
+                    raise DomainError(
+                        "database_tls_required",
+                        "Üretimde PostgreSQL verify-full TLS doğrulaması gerekli.",
+                    )
+                permitted_host(host, c["port"], self.settings.allowed_db_hosts)
             query = {
-                "sslmode": c.get("sslmode", "require"),
+                "sslmode": c["sslmode"],
                 "connect_timeout": str(c.get("timeout", 10)),
             }
+            if c.get("sslrootcert"):
+                query["sslrootcert"] = c["sslrootcert"]
+            if connect and not self.settings.demo:
+                query["hostaddr"] = resolve_target(
+                    host,
+                    c["port"],
+                    self.settings.allowed_db_hosts,
+                    self.settings.allowed_cidrs,
+                    standard_port=5432,
+                )[0]
+            query["options"] = "-c statement_timeout=30000 -c lock_timeout=10000"
             return URL.create(
                 "postgresql+psycopg",
                 username=c.get("username"),
@@ -174,6 +226,36 @@ class Store:
         return p
 
     def profiles(self, kind=None):
+        from .validation import LLMConfig, SQLiteConfig, PostgresConfig
+        from urllib.parse import urlsplit, urlunsplit
+
+        def public_config(profile):
+            allowed = (
+                LLMConfig.model_fields
+                if profile.kind == "llm"
+                else (
+                    SQLiteConfig.model_fields
+                    if profile.config.get("engine") == "sqlite"
+                    else PostgresConfig.model_fields
+                )
+            )
+            result = {k: v for k, v in profile.config.items() if k in allowed}
+            if isinstance(result.get("endpoint"), str):
+                try:
+                    parsed = urlsplit(result["endpoint"])
+                    if (
+                        parsed.username
+                        or parsed.password
+                        or parsed.query
+                        or parsed.fragment
+                    ):
+                        result["endpoint"] = urlunsplit(
+                            (parsed.scheme, parsed.hostname or "", parsed.path, "", "")
+                        )
+                except ValueError:
+                    result["endpoint"] = ""
+            return result
+
         with self.cs() as s:
             bindings = {b.purpose: b.version_id for b in s.scalars(select(Binding))}
             q = select(Profile).where(Profile.deleted == False)
@@ -185,7 +267,7 @@ class Store:
                     kind=p.kind,
                     name=p.name,
                     version=p.version,
-                    config=p.config,
+                    config=public_config(p),
                     has_secret=bool(p.secret),
                     active_for=[
                         k for k, v in bindings.items() if v == f"{p.id}:{p.version}"
@@ -205,24 +287,42 @@ class Store:
     ):
         if kind not in ["llm", "db"]:
             raise DomainError("invalid_kind", "Bağlantı türü geçersiz.")
+        from .validation import connection_config
+        from .network import https_endpoint
+
+        config = connection_config(kind, config)
         if kind == "db":
             self.db_url(config, secret)
         else:
-            if config.get("provider") not in [
-                "mock",
-                "openai_responses",
-                "openai_compatible_chat",
-            ]:
-                raise DomainError("invalid_provider", "LLM protokolü desteklenmiyor.")
-            if not config.get("model"):
-                raise DomainError("missing_model", "Model adı gerekli.")
-            if not 1 <= int(config.get("concurrency", 3)) <= 20:
-                raise DomainError("invalid_concurrency", "Paralellik 1–20 olmalı.")
+            if config["provider"] != "mock":
+                https_endpoint(config["endpoint"], self.settings.allowed_hosts)
+            elif not self.settings.demo:
+                raise DomainError(
+                    "production_llm_required", "Üretimde mock bağlantı eklenemez."
+                )
         with self.cs() as s:
             if profile_id:
                 p = s.get(Profile, profile_id)
                 if not p or p.deleted or p.kind != kind:
                     raise DomainError("not_found", "Profil bulunamadı.", 404)
+                identity_keys = (
+                    ["provider", "endpoint"]
+                    if kind == "llm"
+                    else ["engine", "host", "port", "username"]
+                )
+                if (
+                    p.secret
+                    and not secret
+                    and not clear_secret
+                    and any(
+                        config.get(k) != p.config.get(k, 5432 if k == "port" else None)
+                        for k in identity_keys
+                    )
+                ):
+                    raise DomainError(
+                        "secret_reentry_required",
+                        "Hedef veya hesap değiştiği için gizli değeri yeniden girin.",
+                    )
                 # Binding versions stay pinned until the administrator explicitly activates the edit.
                 p.version += 1
                 p.name = name
@@ -282,6 +382,15 @@ class Store:
                 )
             with self.session() as app:
                 if any(
+                    j.payload.get("profile_version", "").startswith(pid + ":")
+                    for j in app.scalars(
+                        select(Job).where(Job.status.in_(["queued", "running"]))
+                    )
+                ):
+                    raise DomainError(
+                        "profile_in_use", "Çalışan iş bu profili kullanıyor.", 409
+                    )
+                if any(
                     r.profile_version.startswith(pid + ":")
                     or r.insight_profile_version.startswith(pid + ":")
                     for r in app.scalars(
@@ -296,6 +405,11 @@ class Store:
                         409,
                     )
             p.deleted = True
+            p.secret = None
+            for version in s.scalars(
+                select(ProfileVersion).where(ProfileVersion.profile_id == pid)
+            ):
+                version.secret = None
             # Retain version metadata for historical runs; purge secret material only for unused versions.
             s.add(ControlEvent(profile_id=pid, action="profile_deleted", detail={}))
 
@@ -322,9 +436,16 @@ class Store:
                 )
             )
 
-    def activate_db(self, pid, copy_existing=True):
+    def activate_db(self, pid, copy_existing=True, offline=False):
         """Offline migration: validate and copy before changing the control-store binding."""
         from sqlalchemy import inspect, insert
+
+        if not self.settings.demo and not offline:
+            raise DomainError(
+                "offline_migration_required",
+                "Üretimde DB değişimi, API ve worker durdurulduktan sonra storage-migrate işletim komutuyla yapılır.",
+                409,
+            )
 
         with self.session() as s:
             if s.scalar(
@@ -342,7 +463,7 @@ class Store:
             cfg, secret, vid = p.config, self.decrypt(p.secret), f"{p.id}:{p.version}"
             if s.get(Binding, "application_db").version_id == vid:
                 return {"status": "already_active"}
-        target = engine_for(self.db_url(cfg, secret))
+        target = engine_for(self.db_url(cfg, secret, connect=True))
         identity = lambda url: (
             url.get_backend_name(),
             url.host,

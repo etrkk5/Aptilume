@@ -4,6 +4,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import and_, or_, select, update
 from .models import *
 from .store import get, DomainError
@@ -16,6 +17,7 @@ class Worker:
         self.store = store
         self.owner = uid()
         self.stopping = False
+        self.last_cleanup = 0
 
     def claim(self):
         t = time.time()
@@ -49,18 +51,31 @@ class Worker:
 
     def _heartbeat(self, jid, owner, stop):
         while not stop.wait(10):
-            with self.store.session() as s:
-                s.execute(
-                    update(Job)
-                    .where(
-                        Job.id == jid,
-                        Job.status == "running",
-                        Job.lease_owner == owner,
+            try:
+                with self.store.session() as s:
+                    s.execute(
+                        update(Job)
+                        .where(
+                            Job.id == jid,
+                            Job.status == "running",
+                            Job.lease_owner == owner,
+                        )
+                        .values(lease_until=time.time() + 180, heartbeat_at=now())
                     )
-                    .values(lease_until=time.time() + 180, heartbeat_at=now())
+            except SQLAlchemyError:
+                from .audit import logger
+
+                logger.error(
+                    json.dumps({"event": "worker_heartbeat_failed", "outcome": "error"})
                 )
+                return
 
     def once(self):
+        if time.time() - self.last_cleanup > 60:
+            from .retention import cleanup
+
+            cleanup(self.store)
+            self.last_cleanup = time.time()
         job = self.claim()
         if not job:
             return False
@@ -166,12 +181,19 @@ class Worker:
                 ),
             }
         config = self.store.resolve(version_id=job.payload["profile_version"])
-        provider = Provider(config, self.store.settings.allowed_hosts)
+        provider = Provider(
+            config,
+            self.store.settings.allowed_hosts,
+            allowed_cidrs=self.store.settings.allowed_cidrs,
+            ca_file=self.store.settings.llm_ca_file,
+        )
         start = time.monotonic()
         raw, usage = provider.complete(
             "grade", payload, GradeOutput.model_json_schema()
         )
         grade, score, flags = validate_grade(raw, answer.text, q.rubric)
+        if grade.evidence_type != payload["evidence_type"]:
+            flags.append("evidence_type_mismatch")
         with self.store.session() as s:
             current = get(s, Job, job.id)
             if (
@@ -268,13 +290,15 @@ class Worker:
             data = metrics(build_snapshot(s, job.run_id))
             data.pop("rows", None)
         config = self.store.resolve(version_id=job.payload["profile_version"])
-        value, _ = Provider(config, self.store.settings.allowed_hosts).complete(
-            "insights", data
-        )
-        if not isinstance(value.get("summary"), str) or not isinstance(
-            value.get("actions"), list
-        ):
-            raise DomainError("invalid_insight", "Özet şeması geçersiz.")
+        value, _ = Provider(
+            config,
+            self.store.settings.allowed_hosts,
+            allowed_cidrs=self.store.settings.allowed_cidrs,
+            ca_file=self.store.settings.llm_ca_file,
+        ).complete("insights", data)
+        from .providers import InsightOutput
+
+        value = InsightOutput.model_validate(value).model_dump()
         with self.store.session() as s:
             get(s, Run, job.run_id).insights = value
 
@@ -288,6 +312,22 @@ class Worker:
         signal.signal(signal.SIGTERM, lambda *_: setattr(self, "stopping", True))
         signal.signal(signal.SIGINT, lambda *_: setattr(self, "stopping", True))
         with ThreadPoolExecutor(max_workers=3) as pool:
+            failures = 0
             while not self.stopping:
-                list(pool.map(lambda _: self.once(), range(3)))
-                time.sleep(0.4)
+                try:
+                    list(pool.map(lambda _: self.once(), range(3)))
+                    failures = 0
+                    time.sleep(0.4)
+                except SQLAlchemyError:
+                    from .audit import logger
+
+                    logger.error(
+                        json.dumps(
+                            {"event": "worker_store_unavailable", "outcome": "error"}
+                        )
+                    )
+                    failures += 1
+                    for _ in range(min(30, 2 ** min(failures, 5))):
+                        if self.stopping:
+                            break
+                        time.sleep(1)

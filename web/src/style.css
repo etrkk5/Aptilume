@@ -2800,3 +2800,34 @@ textarea {
     min-height: 14px;
   }
 }
+.directory-pending {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 26px;
+  border-top: 1px solid var(--border);
+  background: var(--soft);
+  font-size: 12px;
+}
+.directory-pending p {
+  margin: 7px 0 0;
+  color: var(--secondary-text);
+}
+.policy-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.security-events {
+  margin-top: 28px;
+  overflow-x: auto;
+}
+@media (max-width: 600px) {
+  .directory-pending {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
+  }
+}

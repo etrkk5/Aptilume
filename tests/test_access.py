@@ -181,6 +181,7 @@ def test_login_throttle_and_production_bootstrap(store, tmp_path, monkeypatch):
             f"sqlite:///{tmp_path/'prod-control.db'}",
             Fernet.generate_key().decode(),
             demo=False,
+            public_base_url="https://testserver",
         )
     )
     with pytest.raises(RuntimeError):
@@ -233,7 +234,10 @@ def test_shared_department_scopes_are_reporting_tree_based(store, scoped):
         assert {p["id"] for p in b["participants"]} == {P(1), P(3), P(5), P(6)}
         assert not b["editable_team_ids"]
         assert (
-            c.patch("/api/v1/teams/team-data", json={"name": "hijack"}).status_code
+            c.patch(
+                "/api/v1/teams/team-data",
+                json={"name": "hijack", "role": "role", "targets": []},
+            ).status_code
             == 403
         )
         assert c.get("/api/v1/admin/directory").status_code == 403

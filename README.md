@@ -16,6 +16,7 @@ corepack enable
 pnpm install --frozen-lockfile
 pnpm build
 cd ..
+export APP_MODE=development
 PYTHONPATH=backend .venv/bin/python -m app.cli bootstrap
 PYTHONPATH=backend .venv/bin/python -m app.cli api
 ```
@@ -23,7 +24,7 @@ PYTHONPATH=backend .venv/bin/python -m app.cli api
 Ayrı terminalde:
 
 ```bash
-PYTHONPATH=backend .venv/bin/python -m app.cli worker
+APP_MODE=development PYTHONPATH=backend .venv/bin/python -m app.cli worker
 ```
 
 Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu hesap yalnızca entegrasyonları yönetir. AD bilgileri girilmeden kurumsal kullanıcı girişi yapılamaz. Temiz kurulum örnek çalışan veya kampanya oluşturmaz; yalnızca 42 kaynak yetkinliğini yükler.
@@ -31,7 +32,7 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.2.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.3.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -40,6 +41,10 @@ Compose API ve worker başlatır, veriyi kalıcı `aptilume_aptilume-data` volum
 ## Görünüm
 
 Giriş sayfası ve uygulama başlığındaki güneş/ay düğmesi açık ve koyu tema arasında geçer. İlk seçim sistem tercihinden alınır; manuel tercih bu tarayıcıda kalıcıdır. Tema tercihi kimlik, oturum veya rol bilgisi saklamaz.
+
+## Güvenlik durumu
+
+0.3.0 güvenlik incelemesi ve sertleştirme sürümüdür. Başlangıç bulguları [inceleme raporunda](docs/SECURITY_REVIEW.md), uygulanan düzeltmeler ve güncel üretim kabul koşulları [sonuç kaydında](docs/SECURITY_REMEDIATION.md) tutulur. Gerçek kurum AD/LLM/OpenShift kabulü bu kod incelemesinin yerini tutmaz.
 
 ## Kimlik ve erişim
 
@@ -56,7 +61,7 @@ AD grup eşlemesi önceliği: İK → entegrasyon yöneticisi → ekip yönetici
 
 Yetki, her API isteğinde sunucuda hesaplanır. Aynı departmanın iki yöneticisi birbirinin çalışanlarını göremez. Ortak departman bağlamı/rol hedefleri yalnızca departmanın tamamına yetkili yönetici veya İK tarafından değiştirilebilir. Kapsamı birden fazla yöneticiyi içeren dönemi yalnızca tüm katılımcılara yetkili kullanıcı kapatabilir, değerlendirebilir ve yayımlayabilir. Çalışanın yerine yönetici veya İK anket yanıtı gönderemez.
 
-Oturumlar sunucuda tutulan, rastgele ve yalnızca hash’i saklanan cookie’lerle çalışır. Cookie HttpOnly/SameSite’dır; üretimde Secure kullanır. Yazma işlemleri CSRF ve Origin kontrolü gerektirir. Süre sınırı 8 saat, hareketsizlik sınırı 30 dakikadır; arka plan yenilemeleri hareketsiz oturumu açık tutmaz. Başarısız girişler sınırlanır. Kullanıcı devre dışı bırakıldığında, rol veya yönetici ilişkisi değiştiğinde kapsam yeniden uygulanır. AD verisi en fazla 5 dakika önbelleğe alınır; süresi dolduğunda dizine erişilemiyorsa yetki genişletilmez ve istek reddedilir. AD ayarları değiştirildiğinde kurumsal oturumlar iptal edilir.
+Oturumlar sunucuda tutulan, rastgele ve yalnızca hash’i saklanan cookie’lerle çalışır. Cookie HttpOnly/SameSite’dır; üretimde Secure kullanır. Yazma işlemleri CSRF ve Origin kontrolü gerektirir. Süre sınırı 8 saat, hareketsizlik sınırı 30 dakikadır; arka plan yenilemeleri hareketsiz oturumu açık tutmaz. Başarısız girişler sınırlanır. Kullanıcı devre dışı bırakıldığında, rol veya yönetici ilişkisi değiştiğinde kapsam yeniden uygulanır. AD verisi en fazla 5 dakika önbelleğe alınır; süresi dolduğunda dizine erişilemiyorsa yetki genişletilmez ve istek reddedilir. AD ayarları uygulandığında kurumsal oturumlar iptal edilir. Üretimde çerez `__Host-` öneki kullanır. Hesap ve IP kotaları ortak kontrol deposunda atomik tutulur; farklı IP, paralel istek veya farklı pod ile hesap kotası aşılmaz. En fazla 5 oturum tutulur. Hassas AD/LLM etkinleştirmelerinde son 15 dakikada giriş yapılmış olması gerekir.
 
 ## Admin panelinde AD kurulumu
 
@@ -65,6 +70,8 @@ Oturumlar sunucuda tutulan, rastgele ve yalnızca hash’i saklanan cookie’ler
 3. İK ve entegrasyon admini gruplarının tam DN’lerini ayrı satırlarda tanımlayın. İç içe gruplar desteklenir. Yönetici alanı varsayılan olarak `manager`, kalıcı kimlik `objectGUID`, kullanıcı adı `sAMAccountName`, ekip `department` alanıdır.
 4. Ayarları kaydedin, **Test et** ile TLS/servis hesabı/Base DN kontrolünü çalıştırın. AD girişini etkinleştirin ve **Eşitle** ile kişileri/ekipleri alın.
 5. İK hesabıyla ekip bağlamını, title bazlı rol profillerini ve katılımcı–rol eşlemelerini tamamlayın. İK kademesi/rolü yalnızca AD title metninden otomatik tahmin edilmez.
+
+İlk kurumsal kullanıcı eşitlemesi tamamlandıktan sonra entegrasyon admininin AD değişikliği öneri olarak saklanır. Aktif politika değişmez; ayrı bir İK kullanıcısı öneriyi inceleyip uygular veya reddeder. Kurulum kilidi kullanıcılar devre dışı bırakıldığında yeniden açılmaz. İlk kurulum hesabı, gerçek AD güven ilişkisi kurulana kadar IAM bootstrap yetkisine sahiptir; bu aşama yalnızca kontrollü işletim ağı üzerinden yapılmalıdır.
 
 Sunucu veya servis hesabı değişirse parola yeniden girilmelidir. Kayıtlı sırlar geri okunmaz; boş parola korunur. Yerel adminin güçlü parola belirleme ve çıkış işlemleri hesap menüsündedir. Yerel hesabın kapatılması gerekiyorsa önce kurumsal yönetici ve kurtarma süreci işletim ekibince doğrulanmalıdır.
 
@@ -82,23 +89,31 @@ Sentetik puanların kaynağı **Rapor bilgileri** ve Excel metodolojisinde belir
 
 ## LLM ve DB bağlantıları
 
-Bağlantılar admin panelinden eklenir, düzenlenir, test edilir, görevler için etkinleştirilir ve bağımlılıkları uygunsa silinir. Düzenleme yeni sürüm oluşturur; eski işler kullandıkları sürümü korur. Boş secret korunur, temizlemek için ayrı seçenek gerekir.
+Bağlantılar admin panelinden eklenir, düzenlenir, test edilir ve bağımlılıkları uygunsa silinir. Çalışan verisini bir LLM profiline yönlendirecek görev seçimlerini yalnızca İK etkinleştirir. Hedef/hesap değişince eski anahtar yeni sunucuya taşınmaz; yeni secret girilmelidir. Bağlantı profiline serbest header, parola veya ek bağlantı parametresi gömülemez. Düzenleme yeni sürüm oluşturur; eski işler kullandıkları sürümü korur. Boş secret korunur, temizlemek için ayrı seçenek gerekir.
 
-LLM protokolleri: `mock`, `openai_responses`, `openai_compatible_chat`. Base URL sürüm kökünü içermelidir (`https://llm.example/v1`); adapter `/responses` veya `/chat/completions` ekler. Gerçek endpoint host’u `OUTBOUND_ALLOWED_HOSTS` listesinde bulunmalıdır. Başarılı bağlantı testi modelin ölçüm kalitesini doğrulamaz. Üretimde mock profil ile soru/puanlama işi başlatılması engellenir.
+LLM protokolleri: `mock`, `openai_responses`, `openai_compatible_chat`. Base URL sürüm kökünü içermelidir (`https://llm.example/v1`); adapter `/responses` veya `/chat/completions` ekler. Gerçek endpoint host’u `OUTBOUND_ALLOWED_HOSTS` listesinde bulunmalıdır. Özel port için `host:port` yazın. Kurum içi IP ağları ayrıca `OUTBOUND_ALLOWED_CIDRS` ile izinli olmalıdır; loopback, metadata, link-local ve IPv4-mapped eşdeğerleri engellenir. Doğrulanan IP bağlantıda sabitlenir, TLS SNI/host kontrolü korunur. `HTTP_PROXY`/`HTTPS_PROXY` örtük olarak kullanılmaz. Kurumsal LLM CA yolu `LLM_CA_FILE` ile verilir. Başarılı bağlantı testi modelin ölçüm kalitesini doğrulamaz. Üretimde mock profil ile soru/puanlama işi başlatılması engellenir.
 
-SQLite ve PostgreSQL desteklenir. DB bağlantı testi tablo oluşturmaz. Aktifleştirme öncesi taşıma önizlemesi vardır; açık dönemler ve işler tamamlanmalı, yazmalar durdurulmalı, yedek alınmalı ve hedef boş olmalıdır. Transaction ile kopyalama ve içerik karşılaştırması tamamlanınca bağlantı değiştirilir. Çok instance ile çevrimiçi taşıma desteklenmez.
+SQLite ve PostgreSQL desteklenir. DB bağlantı testi tablo oluşturmaz. Aktifleştirme öncesi taşıma önizlemesi vardır; açık dönemler ve işler tamamlanmalı, yazmalar durdurulmalı, yedek alınmalı ve hedef boş olmalıdır. Transaction ile kopyalama ve içerik karşılaştırması tamamlanınca bağlantı değiştirilir. Üretimde web üzerinden DB taşıması engellenir. İşletim ekibi API ve worker’ı durdurup yedek aldıktan sonra aşağıdaki komutu çalıştırır; `--services-stopped` gerçek servis durdurma/yedek kontrolünün yerine geçmez:
+
+```bash
+PYTHONPATH=backend python -m app.cli storage-migrate --profile-id PROFIL_ID --services-stopped
+```
+
+Bu komut yalnızca işletim erişimi olan operatör içindir. Yeni bağlantıya geçildikten sonra API/worker yeniden başlatılır. Kontrol deposu otomatik taşınmaz; onun adresi başlangıç Secret/env ayarıdır.
 
 Kontrol deposu kimlikleri, oturumları, bağlantı sürümlerini, görev seçimlerini ve şifreli sırları tutar. Uygulama deposu anketleri, sonuçları, kapsamlı export kayıtlarını ve gelişim planlarını tutar. Kontrol deposunun başlangıç URL’si `CONTROL_STORE_URL` ile verilir. Uygulama DB’si erişilemezse yerel admin bağlantı kurtarma ekranı açık kalır.
 
 ## OpenShift / üretim ayarları
 
-Image non-root `1001:0`, port 8080 ile çalışır; keyfi UID/grup 0, read-only kök dosya sistemi ve capability kapatma desteklenir. Yazılabilir alanlar `/app/data` ve `/tmp` ile sınırlıdır. Aynı image `bootstrap`, `migrate`, `api` ve `worker` komutlarıyla kullanılır. `bootstrap` katalog ve ilk kurulum hesabını hazırlar; gerçek kuruma sentetik veri yüklemez.
+Image güncel Alpine Python tabanına ve değişmez digestlere sabitlenmiştir. Runtime pytest/derleme aracı içermez; uygulama kaynakları grup tarafından yazılamaz. Image non-root `1001:0`, port 8080 ile çalışır; keyfi UID/grup 0, read-only kök dosya sistemi ve capability kapatma desteklenir. Yazılabilir alanlar `/app/data` ve `/tmp` ile sınırlıdır. Aynı image `bootstrap`, `migrate`, `api` ve `worker` komutlarıyla kullanılır. `bootstrap` katalog ve ilk kurulum hesabını hazırlar; gerçek kuruma sentetik veri yüklemez.
 
 İşletim ekibinin deployment için vereceği ayarlar:
 
-- `APP_MODE=production`: Secure cookie/HSTS; API dokümantasyonu, zayıf ilk parola, seed ve mock iş çalıştırma kapalı.
+- Varsayılan `APP_MODE=production`; geçersiz değer başlangıcı durdurur. Yerelde geliştirme açıkça `APP_MODE=development` olmalıdır. `APP_MODE=production`: Secure cookie/HSTS; API dokümantasyonu, zayıf ilk parola, seed ve mock iş çalıştırma kapalı.
 - Kalıcı ve tüm süreçlerde aynı `SECRET_ENCRYPTION_KEY` (Fernet): cluster Secret’tan verilmelidir. Mevcut şifreli veride anahtar kendiliğinden değiştirilmez.
-- İlk boş kurulumda benzersiz `BOOTSTRAP_ADMIN_PASSWORD` (en az 12 karakter). Yerel `admin/admin` ile kurulmuş veride önce hesap menüsünden parola değiştirilmelidir; üretim başlangıcı geçici parolayı reddeder.
+- İlk boş kurulumda benzersiz `BOOTSTRAP_ADMIN_PASSWORD` (en az 15 karakter, en fazla 128 karakter). Yerel `admin/admin` ile kurulmuş veride önce hesap menüsünden parola değiştirilmelidir; üretim başlangıcı geçici parolayı reddeder.
+- `DB_ALLOWED_HOSTS`, `DIRECTORY_ALLOWED_HOSTS`: üretim DB/AD hedeflerinin tam host adları; özel port için `host:port`. Kurum içi CIDR’leri `OUTBOUND_ALLOWED_CIDRS` ile açıkça belirtin. PostgreSQL `verify-full` zorunludur; `sslrootcert` admin profilinde veya kontrol deposu URL’sinde kurumsal CA yoludur.
+- `FORWARDED_ALLOW_IPS`: yalnızca güvenilen Route/proxy IP’leri veya ağları. Varsayılan boş; istemci IP’si için rastgele forwarded header’a güvenilmez. `*` kullanmayın.
 - `PUBLIC_BASE_URL=https://...`: kullanıcıya açılacak Route adresi. TLS sonlandırma/sertifika, CA mount, LLM izinli host’ları, AD/DB ağ erişimi, kalıcı veri ve yedekler işletim ekibince sağlanır.
 - API ve worker ayrı süreç/pod olarak çalışmalıdır. SQLite ile tek API, tek worker ve uygun paylaşılan yerel disk kullanılmalıdır. Çok replica/HA hedefleniyorsa kontrol ve uygulama depoları uygun kurumsal PostgreSQL’e taşınmalı ve eşzamanlılık/yük testi yapılmalıdır.
 
@@ -112,9 +127,18 @@ Dağıtım sırası: yedek → uygulama yazmalarını/worker’ı durdur → `mi
 
 Worker HTTP sunmaz; API’ye özgü image healthcheck’i worker’da devre dışı bırakılmalıdır. İş lease/heartbeat ve süreç durumu izlenir. Readiness, LLM veya AD kullanılabilirliği garantisi değildir.
 
+## Güvenlik ve yaşam döngüsü sınırları
+
+JSON gövdesi auth uçlarında 8 KiB, diğer API uçlarında 64 KiB ile sınırlıdır; sıkıştırılmış, mükerrer alanlı, aşırı derin veya sonlu olmayan sayı içeren JSON reddedilir. LLM girdi sınırı 256 KiB, yanıt sınırı 1 MiB; model çıktısı görev bazında token ve şema sınırına tabidir. Export 5/10 dakika/kullanıcı; toplam export başlatma 100/10 dakika ile sınırlıdır. İstek ve model sınırlarını aşan işlem teknik hata olarak gösterilir; sıfır yetkinlik puanı üretilmez.
+
+Excel dosyaları varsayılan 7 gün sonra worker tarafından temizlenir (`EXPORT_RETENTION_DAYS`, 1–90). Dosya üst sınırı 50 MiB ve çıktı alanı bütçesi 1 GiB; indirmede dizin ve hash doğrulanır. Güvenlik olayları varsayılan 90 gün saklanır (`AUDIT_RETENTION_DAYS`, 7–365). Ham parolalar, cookie, API anahtarı ve yanıt metinleri güvenlik loguna yazılmaz. Anonim ret olayları log taşmasını sınırlamak için örneklenir; baskılanan sayı özetlenir. İK paneli son olayları gösterir; stdout olayları SIEM’e alınmalıdır.
+
+Uygulama TOTP/MFA sağlamaz. Ayrıcalıklı erişim, kurumun MFA/koşullu erişim sağlayan güvenli erişim katmanı arkasına alınmalıdır. WAF/ingress kotaları, Secret/PVC şifreleme ve yedek, TLS/CA, LLM gateway bütçesi ve gerçek yük/sızma testi kurum kabulünün parçasıdır.
+
 ## Doğrulama ve ölçüm sınırları
 
 ```bash
+.venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest
 cd web
 pnpm build

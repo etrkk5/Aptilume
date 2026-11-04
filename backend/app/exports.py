@@ -9,6 +9,39 @@ from .store import get
 from .reporting import metrics
 from .access import export_snapshot
 
+MAX_EXPORT_SIZE = 50 * 1024 * 1024
+EXPORT_DISK_BUDGET = 1024 * 1024 * 1024
+
+
+def artifact_path(store, export, verify=True):
+    directory = (store.settings.data_dir / "exports").resolve()
+    candidate = Path(export.file or "")
+    if (
+        not directory.is_relative_to(store.settings.data_dir)
+        or candidate.name != export.id + ".xlsx"
+        or candidate.parent.resolve() != directory
+        or candidate.is_symlink()
+        or not candidate.is_file()
+    ):
+        from .store import DomainError
+
+        raise DomainError(
+            "invalid_artifact", "Excel dosyası bulunamadı veya geçersiz.", 409
+        )
+    if candidate.stat().st_size > MAX_EXPORT_SIZE:
+        from .store import DomainError
+
+        raise DomainError("invalid_artifact", "Excel dosya boyutu geçersiz.", 409)
+    if verify and hashlib.sha256(candidate.read_bytes()).hexdigest() != export.sha256:
+        from .store import DomainError
+
+        raise DomainError(
+            "artifact_integrity_failed",
+            "Excel bütünlük kontrolü başarısız. Yeni çıktı oluşturun.",
+            409,
+        )
+    return candidate
+
 
 def add_sheet(wb, name, columns, rows):
     ws = wb.create_sheet(name)
@@ -45,13 +78,8 @@ def build_export(store, eid):
         snapshot = export_snapshot(store, s, export)
         filters = export.filters
         detailed = export.detail
-        if (
-            export.status == "ready"
-            and export.file
-            and Path(export.file).exists()
-            and hashlib.sha256(Path(export.file).read_bytes()).hexdigest()
-            == export.sha256
-        ):
+        if export.status == "ready" and export.file:
+            artifact_path(store, export)
             return
     report = metrics(snapshot, filters.get("team_id"), filters.get("skill_id"))
     wb = Workbook()
@@ -178,9 +206,36 @@ def build_export(store, eid):
     )
     out = store.settings.data_dir / "exports"
     out.mkdir(exist_ok=True)
+    if not out.resolve().is_relative_to(store.settings.data_dir):
+        from .store import DomainError
+
+        raise DomainError("invalid_path", "Çıktı dizini geçersiz.")
+    if (
+        sum(
+            p.stat().st_size
+            for p in out.glob("*.xlsx")
+            if p.is_file() and not p.is_symlink()
+        )
+        >= EXPORT_DISK_BUDGET
+    ):
+        from .store import DomainError
+
+        raise DomainError(
+            "export_disk_limit",
+            "Excel alanı dolu. Süresi dolan çıktıları temizleyin.",
+            507,
+        )
     temp = out / f"{eid}.tmp.xlsx"
     final = out / f"{eid}.xlsx"
     wb.save(temp)
+    if temp.stat().st_size > MAX_EXPORT_SIZE:
+        temp.unlink()
+        from .store import DomainError
+
+        raise DomainError(
+            "export_size_limit",
+            "Excel boyutu 50 MiB sınırını aşıyor. Kapsamı daraltın.",
+        )
     os.replace(temp, final)
     digest = hashlib.sha256(final.read_bytes()).hexdigest()
     with store.session() as s:

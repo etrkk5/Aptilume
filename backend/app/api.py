@@ -8,12 +8,22 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update, text
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi.exceptions import RequestValidationError
 from .config import Settings, ROOT, REFERENCE_DIR
 from .store import Store, DomainError, get, engine_for
 from .models import *
 from .services import *
 from .reporting import metrics, publish
 from .providers import Provider
+from .audit import correlation_context
+from .validation import (
+    TeamInput,
+    RoleInput,
+    PersonInput,
+    BindingInput,
+    ActivateInput,
+    ExportInput,
+)
 from .security import AuthService, install_auth, current_actor
 from .access import (
     require_business,
@@ -35,18 +45,18 @@ from .access import (
 class ProfileInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     config: dict
-    secret: str | None = None
+    secret: str | None = Field(default=None, max_length=4096)
     clear_secret: bool = False
 
 
 class CampaignInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    team_ids: list[str] | None = None
+    team_ids: list[str] | None = Field(default=None, max_length=100)
 
 
 class AnswerInput(BaseModel):
     text: str = Field(default="", max_length=8000)
-    selected: list[str] = Field(default_factory=list)
+    selected: list[str] = Field(default_factory=list, max_length=20)
     state: str = "answered"
     revision: int = Field(default=0, ge=0)
 
@@ -58,9 +68,10 @@ class ReviewInput(BaseModel):
 
 def create_app(settings=None, store=None, auth_service=None):
     store = store or Store(settings or Settings.from_env())
+    store.settings.validate_web()
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.2.0",
+        version="0.3.0",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
@@ -69,14 +80,41 @@ def create_app(settings=None, store=None, auth_service=None):
     app.state.auth = auth_service or AuthService(store)
     install_auth(app, store, app.state.auth)
 
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "code": "invalid_request",
+                "message": "Alanların türünü, boyutunu ve zorunlu değerlerini kontrol edin.",
+                "errors": [
+                    {
+                        "field": ".".join(str(x)[:50] for x in error["loc"][:6]),
+                        "type": error["type"],
+                    }
+                    for error in exc.errors()[:20]
+                ],
+            },
+        )
+
     @app.exception_handler(DomainError)
     async def domain_error(request, exc):
+        from .audit import record
+
+        record(
+            store,
+            "operation_denied",
+            "denied",
+            actor_id=getattr(getattr(request.state, "actor", None), "id", ""),
+            reason=exc.code,
+            status=exc.status,
+        )
         return JSONResponse(
             status_code=exc.status,
             content={
                 "code": exc.code,
                 "message": exc.message,
-                "correlation_id": str(uuid4()),
+                "correlation_id": correlation_context.get(),
             },
         )
 
@@ -87,7 +125,7 @@ def create_app(settings=None, store=None, auth_service=None):
             content={
                 "code": "application_store_unavailable",
                 "message": "Veri deposuna ulaşılamadı. Bağlantı ayarlarını kontrol edin; kayıt tamamlanmadı.",
-                "correlation_id": str(uuid4()),
+                "correlation_id": correlation_context.get(),
             },
         )
 
@@ -122,15 +160,33 @@ def create_app(settings=None, store=None, auth_service=None):
 
     @app.get("/api/v1/bootstrap")
     def bootstrap():
+        actor = current_actor()
+        if not actor.business:
+            return {
+                "product": "Aptilume",
+                "tagline": "AI Skills Intelligence",
+                "identity": actor.public(),
+                "security": {"offline_database_migration": not store.settings.demo},
+                "teams": [],
+                "participants": [],
+                "role_profiles": [],
+                "editable_team_ids": [],
+                "campaigns": [],
+                "skills_count": 0,
+                "source_issues": [],
+            }
         try:
             return bootstrap_data()
-        except SQLAlchemyError:
+        except (SQLAlchemyError, DomainError):
             return {
                 "product": "Aptilume",
                 "tagline": "AI Skills Intelligence",
                 "identity": current_actor().public(),
+                "security": {"offline_database_migration": not store.settings.demo},
                 "mode": "demo",
                 "teams": [],
+                "role_profiles": [],
+                "editable_team_ids": [],
                 "participants": [],
                 "campaigns": [],
                 "skills_count": 0,
@@ -162,6 +218,7 @@ def create_app(settings=None, store=None, auth_service=None):
                 "product": "Aptilume",
                 "tagline": "AI Skills Intelligence",
                 "identity": actor.public(),
+                "security": {"offline_database_migration": not store.settings.demo},
                 "teams": [
                     asdict(t)
                     for t in s.scalars(select(Team).where(Team.id.in_(list(team_ids))))
@@ -266,7 +323,8 @@ def create_app(settings=None, store=None, auth_service=None):
         return load_catalog(store)
 
     @app.post("/api/v1/teams")
-    def add_team(payload: dict):
+    def add_team(value: TeamInput):
+        payload = value.model_dump()
         validate_team(payload)
         with store.session() as s:
             t = Team(
@@ -280,7 +338,8 @@ def create_app(settings=None, store=None, auth_service=None):
             return asdict(t)
 
     @app.patch("/api/v1/teams/{tid}")
-    def patch_team(tid: str, payload: dict):
+    def patch_team(tid: str, value: TeamInput):
+        payload = value.model_dump()
         with store.session() as s:
             check_team(s, tid, write=True)
             validate_team(payload)
@@ -320,7 +379,8 @@ def create_app(settings=None, store=None, auth_service=None):
             raise DomainError("duplicate_targets", "Aynı yetkinlik tekrarlanamaz.")
 
     @app.post("/api/v1/role-profiles")
-    def add_role(p: dict):
+    def add_role(value: RoleInput):
+        p = value.model_dump()
         validate_team(
             {
                 "name": p.get("title"),
@@ -342,7 +402,8 @@ def create_app(settings=None, store=None, auth_service=None):
             return asdict(r)
 
     @app.patch("/api/v1/role-profiles/{rid}")
-    def edit_role(rid: str, p: dict):
+    def edit_role(rid: str, value: RoleInput):
+        p = value.model_dump()
         validate_team(
             {
                 "name": p.get("title"),
@@ -360,12 +421,12 @@ def create_app(settings=None, store=None, auth_service=None):
             return asdict(r)
 
     @app.post("/api/v1/participants")
-    def add_participant(p: dict):
-        return save_participant(p)
+    def add_participant(p: PersonInput):
+        return save_participant(p.model_dump())
 
     @app.patch("/api/v1/participants/{pid}")
-    def edit_participant(pid: str, p: dict):
-        return save_participant(p, pid)
+    def edit_participant(pid: str, p: PersonInput):
+        return save_participant(p.model_dump(), pid)
 
     def save_participant(p, pid=None):
         if not p.get("name") or not p.get("title"):
@@ -576,6 +637,8 @@ def create_app(settings=None, store=None, auth_service=None):
                         "answer": a.text,
                         "question": q.prompt,
                         "rubric": q.rubric,
+                        "can_review": get(s, Assignment, a.assignment_id).participant_id
+                        != current_actor().participant_id,
                     }
                 )
             return result
@@ -586,11 +649,31 @@ def create_app(settings=None, store=None, auth_service=None):
             e = get(s, Evaluation, eid)
             answer = get(s, Answer, e.answer_id)
             check_assignment(s, answer.assignment_id)
+            if (
+                get(s, Assignment, answer.assignment_id).participant_id
+                == current_actor().participant_id
+            ):
+                raise DomainError(
+                    "self_review_forbidden",
+                    "Kendi yanıtınızı inceleyemezsiniz. Başka bir yetkili incelemeli.",
+                    403,
+                )
             r = get(s, Run, e.run_id)
             if r.status == "published":
                 raise DomainError(
                     "published_result",
                     "Yayımlanan sonucu değiştirmek için yeni koşu açın.",
+                    409,
+                )
+            changed = s.execute(
+                update(Evaluation)
+                .where(Evaluation.id == eid, Evaluation.review_status == "pending")
+                .values(review_status="resolved")
+            )
+            if changed.rowcount != 1:
+                raise DomainError(
+                    "review_conflict",
+                    "İnceleme bekleyen durumda değil veya başka bir yetkili tarafından tamamlandı.",
                     409,
                 )
             s.add(
@@ -703,8 +786,9 @@ def create_app(settings=None, store=None, auth_service=None):
         return {"status": "deleted"}
 
     @app.put("/api/v1/admin/service-bindings/{purpose}")
-    def bind(purpose: str, p: dict):
-        store.bind(purpose, p["profile_id"])
+    def bind(purpose: str, p: BindingInput):
+        require_hr()
+        store.bind(purpose, p.profile_id)
         return {"status": "active"}
 
     @app.post("/api/v1/admin/connections/{kind}/{pid}/test")
@@ -716,14 +800,22 @@ def create_app(settings=None, store=None, auth_service=None):
         start = time.monotonic()
         try:
             if kind == "llm":
-                result, _ = Provider(cfg, store.settings.allowed_hosts).complete(
-                    "test", {"test": "connectivity_only"}
-                )
+                result, _ = Provider(
+                    cfg,
+                    store.settings.allowed_hosts,
+                    allowed_cidrs=store.settings.allowed_cidrs,
+                    ca_file=store.settings.llm_ca_file,
+                ).complete("test", {"test": "connectivity_only"})
                 if result.get("ok") is not True:
                     raise ValueError("unexpected_schema")
                 mode = "mock" if cfg["provider"] == "mock" else "real"
             else:
-                engine = engine_for(store.db_url(cfg, cfg.get("secret")))
+                db_config = {
+                    k: v for k, v in cfg.items() if k not in ["secret", "version_id"]
+                }
+                engine = engine_for(
+                    store.db_url(db_config, cfg.get("secret"), connect=True)
+                )
                 try:
                     with engine.connect() as c:
                         c.execute(text("SELECT 1"))
@@ -754,6 +846,7 @@ def create_app(settings=None, store=None, auth_service=None):
 
     @app.post("/api/v1/admin/db-connections/{pid}/migration-preview")
     def migration_preview(pid: str):
+        require_hr()
         with store.session() as s:
             return {
                 "maintenance_required": True,
@@ -771,11 +864,13 @@ def create_app(settings=None, store=None, auth_service=None):
             }
 
     @app.post("/api/v1/admin/db-connections/{pid}/activate")
-    def activate(pid: str, p: dict):
-        return store.activate_db(pid, p.get("copy_existing", True))
+    def activate(pid: str, p: ActivateInput):
+        require_hr()
+        return store.activate_db(pid, p.copy_existing)
 
     @app.post("/api/v1/exports", status_code=202)
-    def export(p: dict):
+    def export(value: ExportInput):
+        p = value.model_dump()
         with store.session() as s:
             actor = require_business()
             publication = get(s, Publication, p["publication_id"])
@@ -839,14 +934,26 @@ def create_app(settings=None, store=None, auth_service=None):
             check_export(s, e)
             if e.status != "ready":
                 raise DomainError("not_ready", "Excel henüz hazır değil.", 409)
-            path = Path(e.file).resolve()
-            if not path.is_relative_to(store.settings.data_dir):
-                raise DomainError("invalid_path", "Dosya yolu geçersiz.")
-            return FileResponse(path, filename=f"Aptilume-{eid[:8]}.xlsx")
+            from .exports import artifact_path
+
+            path = artifact_path(store, e)
+            from .audit import record
+
+            record(
+                store, "export_downloaded", actor_id=current_actor().id, target_id=eid
+            )
+            return FileResponse(
+                path,
+                filename=f"Aptilume-{eid[:8]}.xlsx",
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
     from .product import install_product_routes
 
     install_product_routes(app, store)
+    from .http_security import SecurityEnvelope
+
+    app.add_middleware(SecurityEnvelope, store=store)
     dist = ROOT / "web/dist"
     if dist.exists():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

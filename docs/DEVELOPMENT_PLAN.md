@@ -1,3 +1,5 @@
+> **Güvenlik güncellemesi (0.3.0):** Aktif güven politikası artık `SECURITY_REMEDIATION.md` ve README içindeki sınırlarla uygulanır: AD değişiklikleri İK onaylıdır, LLM görev etkinleştirme İK yetkisidir, üretim DB taşıması çevrimdışıdır. Varsayılan çalışma modu üretimdir.
+
 > **Güncel uygulama notu (0.2.0):** Bu belgenin ilk faz varsayımları geliştirme sırasında güncellenmiştir. Auth artık uygulanmıştır; AD, rol kapsamları, kalıcı gelişim planları ve açık/koyu tema mevcuttur. Geçerli kurulum ve kapsam README ile belgenin sonundaki “Uygulanan kapsam güncellemesi” bölümündedir. Eski devir promptundaki auth ertelemesi geçerli değildir.
 
 # Yapı Kredi AI Yetkinlik Ölçüm Platformu Geliştirme Planı

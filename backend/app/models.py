@@ -105,6 +105,34 @@ class LoginAttempt(ControlBase):
     created_at: Mapped[float] = mapped_column(index=True)
 
 
+class RateBucket(ControlBase):
+    __tablename__ = "security_rate_buckets"
+    key: Mapped[str] = mapped_column(primary_key=True)
+    count: Mapped[int] = mapped_column(default=0)
+    expires_at: Mapped[float] = mapped_column(index=True)
+
+
+class SecurityEvent(ControlBase):
+    __tablename__ = "security_events"
+    id: Mapped[str] = mapped_column(primary_key=True, default=uid)
+    event: Mapped[str] = mapped_column(String(80), index=True)
+    actor_id: Mapped[str] = mapped_column(default="")
+    correlation_id: Mapped[str] = mapped_column(default="")
+    outcome: Mapped[str] = mapped_column(String(20))
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[str] = mapped_column(default=now, index=True)
+
+
+class DirectoryChange(ControlBase):
+    __tablename__ = "directory_changes"
+    id: Mapped[str] = mapped_column(primary_key=True, default=uid)
+    config: Mapped[dict] = mapped_column(JSON)
+    requested_by: Mapped[str]
+    status: Mapped[str] = mapped_column(default="pending", index=True)
+    approved_by: Mapped[str | None] = mapped_column(nullable=True)
+    created_at: Mapped[str] = mapped_column(default=now)
+
+
 class DevelopmentAction(Base):
     __tablename__ = "development_actions"
     id: Mapped[str] = mapped_column(primary_key=True, default=uid)
