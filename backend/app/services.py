@@ -221,6 +221,9 @@ def create_campaign(store, name, team_ids=None, participant_ids=None):
 
 
 def enqueue_generation(store, campaign_id):
+    from .policies import policy
+
+    instructions = policy(store)
     with store.session() as s:
         c = get(s, Campaign, campaign_id)
         if c.status != "draft":
@@ -239,12 +242,17 @@ def enqueue_generation(store, campaign_id):
             job.payload = {
                 "campaign_id": c.id,
                 "profile_version": profile["version_id"],
+                "prompt_policy_id": instructions["id"],
             }
         else:
             job = Job(
                 kind="generate",
                 dedupe_key=f"generate:{c.id}",
-                payload={"campaign_id": c.id, "profile_version": profile["version_id"]},
+                payload={
+                    "campaign_id": c.id,
+                    "profile_version": profile["version_id"],
+                    "prompt_policy_id": instructions["id"],
+                },
             )
             s.add(job)
         c.status = "preparing"
@@ -367,6 +375,9 @@ def example_questions(skills, team):
 
 
 def generate_questions(store, job):
+    from .policies import policy, DEFAULT_POLICY_ID
+
+    instructions = policy(store, job.payload.get("prompt_policy_id", DEFAULT_POLICY_ID))
     with store.session() as s:
         c = get(s, Campaign, job.payload["campaign_id"])
         if c.status in ["content_review", "ready", "open", "closed"] and s.scalar(
@@ -399,6 +410,7 @@ def generate_questions(store, job):
         team = {
             **cfg["team_snapshots"][profile["team_id"]],
             "role": profile["title"],
+            "job_band": profile.get("job_band", ""),
             "role_profile_id": profile["id"],
             "targets": profile["targets"],
         }
@@ -426,6 +438,7 @@ def generate_questions(store, job):
                 },
                 "example_questions": examples,
             },
+            instructions=instructions["instructions"]["questions"],
         )
         from .validation import QuestionSet
 
@@ -518,6 +531,11 @@ def generate_questions(store, job):
                 )
             )
         c.status = "content_review"
+        c.config = {
+            **c.config,
+            "generation_policy_id": instructions["id"],
+            "generation_policy_version": instructions["version"],
+        }
         s.add(
             Audit(
                 action="questions_generated",
@@ -725,6 +743,8 @@ def save_answer(store, aid, qid, payload):
 
 
 def submit(store, aid):
+    from .quality import readable_text
+
     with store.session() as s:
         a = get(s, Assignment, aid)
         existing = s.scalar(select(Submission).where(Submission.assignment_id == aid))
@@ -745,11 +765,13 @@ def submit(store, aid):
                 )
             )
         )
+        if not expected:
+            raise DomainError("form_not_ready", "Form soruları henüz hazır değil.", 409)
         missing = [
             qid
             for qid in expected
             if qid not in answers
-            or not (answers[qid].text.strip() or answers[qid].selected)
+            or not (readable_text(answers[qid].text) or answers[qid].selected)
         ]
         if missing:
             raise DomainError(
@@ -767,6 +789,9 @@ def submit(store, aid):
 
 
 def start_run(store, cid):
+    from .policies import policy
+
+    instructions = policy(store)
     with store.session() as s:
         c = get(s, Campaign, cid)
         if c.status != "closed":
@@ -804,6 +829,13 @@ def start_run(store, cid):
         )
         s.add(r)
         s.flush()
+        s.add(
+            RunPolicy(
+                run_id=r.id,
+                policy_id=instructions["id"],
+                version=instructions["version"],
+            )
+        )
         for answer in s.scalars(select(Answer).where(Answer.id.in_(manifest))):
             q = get(s, Question, answer.question_id)
             if q.type == "open_text":
@@ -816,6 +848,7 @@ def start_run(store, cid):
                             "answer_id": answer.id,
                             "profile_version": r.profile_version,
                             "pass_no": 1,
+                            "prompt_policy_id": instructions["id"],
                         },
                     )
                 )
@@ -832,6 +865,7 @@ def start_run(store, cid):
                                 "answer_id": answer.id,
                                 "profile_version": r.profile_version,
                                 "pass_no": 2,
+                                "prompt_policy_id": instructions["id"],
                             },
                         )
                     )

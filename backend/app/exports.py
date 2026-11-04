@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from .models import Export, Publication
 from .store import get
-from .reporting import metrics
+from .reporting import metrics, enrich_snapshot
 from .access import export_snapshot
 
 MAX_EXPORT_SIZE = 50 * 1024 * 1024
@@ -75,13 +75,13 @@ def build_export(store, eid):
     with store.session() as s:
         export = get(s, Export, eid)
         pub = get(s, Publication, export.publication_id)
-        snapshot = export_snapshot(store, s, export)
+        snapshot = enrich_snapshot(s, export_snapshot(store, s, export))
         filters = export.filters
         detailed = export.detail
         if export.status == "ready" and export.file:
             artifact_path(store, export)
             return
-    report = metrics(snapshot, filters.get("team_id"), filters.get("skill_id"))
+    report = metrics(snapshot, **filters)
     wb = Workbook()
     wb.remove(wb.active)
     summary = [
@@ -97,9 +97,14 @@ def build_export(store, eid):
             "submitted",
             "completion_rate",
             "common_score",
+            "common_median",
             "common_n",
             "level_coverage",
             "target_met_rate",
+            "target_comparison_n",
+            "target_eligible_n",
+            "target_coverage_rate",
+            "target_comparison_people",
         ]
     ]
     add_sheet(wb, "Ozet", [("metric", "Metrik"), ("value", "Değer")], summary)
@@ -109,6 +114,7 @@ def build_export(store, eid):
         [
             ("team_name", "Ekip"),
             ("skill_name", "Yetkinlik"),
+            ("comparison_group", "Karşılaştırma grubu"),
             ("n", "Geçerli kişi"),
             ("written_score", "Yazılı puan"),
             ("target_level", "Hedef seviye"),
@@ -116,6 +122,37 @@ def build_export(store, eid):
             ("suppressed", "Küçük grup bastırıldı"),
         ],
         report["aggregates"],
+    )
+    add_sheet(
+        wb,
+        "Ekip_Katilim",
+        [
+            ("team_name", "Ekip"),
+            ("assigned", "Davet"),
+            ("submitted", "Gönderildi"),
+            ("draft", "Taslak"),
+            ("not_started", "Başlamadı"),
+            ("completion_rate", "Katılım %"),
+            ("common_score", "Ortak puan"),
+            ("common_n", "Geçerli kişi"),
+        ],
+        report["team_summary"],
+    )
+    add_sheet(
+        wb,
+        "Puan_Dagilimi",
+        [("label", "Ortak puan aralığı"), ("count", "Kişi")],
+        report["score_distribution"],
+    )
+    add_sheet(
+        wb,
+        "Seviye_Dagilimi",
+        [("level", "Anket seviye önerisi"), ("count", "Kişi-yetkinlik gözlemi")],
+        [
+            {"level": "L" + level, "count": count}
+            for level, count in report["levels"].items()
+            if level in ["1", "2", "3"]
+        ],
     )
     if detailed:
         add_sheet(
@@ -127,6 +164,9 @@ def build_export(store, eid):
                     ("participant_id", "Kişi ID"),
                     ("name", "Ad"),
                     ("team_name", "Ekip"),
+                    ("title", "Unvan"),
+                    ("job_band", "Kademe"),
+                    ("comparison_group", "Karşılaştırma grubu"),
                     ("skill_name", "Yetkinlik"),
                     ("written_score", "Yazılı puan"),
                     ("mcq_score", "MCQ puanı"),
@@ -180,7 +220,7 @@ def build_export(store, eid):
         wb,
         "Gelistirme_Onerileri",
         [("action", "Gelişim aksiyonu")],
-        [{"action": x} for x in snapshot.get("insights", {}).get("actions", [])],
+        [{"action": x} for x in report.get("insights", {}).get("actions", [])],
     )
     add_sheet(
         wb,
@@ -189,6 +229,18 @@ def build_export(store, eid):
         [
             {"rule": "Sonuç sürümü", "value": pub.id},
             {"rule": "Filtreler", "value": filters},
+            {
+                "rule": "Ortak puan kapsamı",
+                "value": report["methodology"]["common_score_scope"],
+            },
+            {
+                "rule": "Rol karşılaştırması",
+                "value": report["methodology"]["role_comparison"],
+            },
+            {
+                "rule": "Seviye dağılımı birimi",
+                "value": report["methodology"]["level_unit"],
+            },
             {
                 "rule": "Skor",
                 "value": "Yazılı rubrik puanı, MCQ ve öz beyan ayrı tutulur. Eksik/teknik hata sıfır değildir.",

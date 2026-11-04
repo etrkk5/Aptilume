@@ -108,6 +108,10 @@ class ExportFilters(BaseModel):
     model_config = ConfigDict(extra="ignore", strict=True)
     team_id: str | None = Field(default=None, max_length=64)
     skill_id: str | None = Field(default=None, max_length=64)
+    title: str | None = Field(default=None, max_length=200)
+    job_band: str | None = Field(default=None, max_length=32)
+    section: Literal["common", "role"] | None = None
+    response_status: Literal["not_started", "draft", "submitted"] | None = None
 
 
 class ExportInput(BaseModel):

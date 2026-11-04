@@ -1,19 +1,20 @@
 import json
 import time
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 from fastapi import FastAPI, Request, UploadFile, File, Query
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from sqlalchemy import select, update, text
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select, update, text, func
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.exceptions import RequestValidationError
 from .config import Settings, ROOT, REFERENCE_DIR
 from .store import Store, DomainError, get, engine_for
 from .models import *
 from .services import *
-from .reporting import metrics, publish
+from .reporting import metrics, publish, enrich_snapshot
 from .providers import Provider
 from .audit import correlation_context
 from .validation import (
@@ -65,13 +66,20 @@ class ReviewInput(BaseModel):
     reason: str = Field(min_length=5, max_length=2000)
     score: float | None = Field(default=None, ge=0, le=100)
 
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value):
+        if len(value.strip()) < 5:
+            raise ValueError("İnceleme gerekçesi en az 5 karakter içermeli.")
+        return value.strip()
+
 
 def create_app(settings=None, store=None, auth_service=None):
     store = store or Store(settings or Settings.from_env())
     store.settings.validate_web()
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.3.1",
+        version="0.4.0",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
@@ -219,6 +227,16 @@ def create_app(settings=None, store=None, auth_service=None):
                 "tagline": "AI Skills Intelligence",
                 "identity": actor.public(),
                 "security": {"offline_database_migration": not store.settings.demo},
+                "quality_pending": (
+                    s.scalar(
+                        select(func.count())
+                        .select_from(QualityIssue)
+                        .join(Evaluation, QualityIssue.evaluation_id == Evaluation.id)
+                        .where(Evaluation.review_status == "pending")
+                    )
+                    if actor.hr
+                    else 0
+                ),
                 "teams": [
                     asdict(t)
                     for t in s.scalars(select(Team).where(Team.id.in_(list(team_ids))))
@@ -631,14 +649,19 @@ def create_app(settings=None, store=None, auth_service=None):
                 ):
                     continue
                 q = get(s, Question, a.question_id)
+                issue = s.scalar(
+                    select(QualityIssue).where(QualityIssue.evaluation_id == e.id)
+                )
                 result.append(
                     {
                         **asdict(e),
                         "answer": a.text,
                         "question": q.prompt,
                         "rubric": q.rubric,
+                        "quality": asdict(issue) if issue else None,
                         "can_review": get(s, Assignment, a.assignment_id).participant_id
-                        != current_actor().participant_id,
+                        != current_actor().participant_id
+                        and (not issue or current_actor().hr),
                     }
                 )
             return result
@@ -647,6 +670,16 @@ def create_app(settings=None, store=None, auth_service=None):
     def review(eid: str, p: ReviewInput):
         with store.session() as s:
             e = get(s, Evaluation, eid)
+            issue = s.scalar(
+                select(QualityIssue).where(QualityIssue.evaluation_id == eid)
+            )
+            if issue:
+                require_hr()
+                if p.score is None:
+                    raise DomainError(
+                        "quality_score_required",
+                        "Yanıt kalitesi incelemesinde İK açık bir 0–100 puan kararı vermeli.",
+                    )
             answer = get(s, Answer, e.answer_id)
             check_assignment(s, answer.assignment_id)
             if (
@@ -733,17 +766,27 @@ def create_app(settings=None, store=None, auth_service=None):
         return {"publication_id": publish(store, rid)}
 
     @app.get("/api/v1/reports/{pid}")
-    def report(pid: str, team_id: str | None = None, skill_id: str | None = None):
+    def report(
+        pid: str,
+        team_id: str | None = Query(default=None, max_length=64),
+        skill_id: str | None = Query(default=None, max_length=64),
+        title: str | None = Query(default=None, max_length=200),
+        job_band: str | None = Query(default=None, max_length=32),
+        section: Literal["common", "role"] | None = None,
+        response_status: Literal["not_started", "draft", "submitted"] | None = None,
+    ):
         with store.session() as s:
             actor = require_business()
             publication = get(s, Publication, pid)
             check_campaign(s, publication.campaign_id)
-            snapshot = filter_snapshot(s, publication.snapshot)
+            snapshot = enrich_snapshot(s, filter_snapshot(s, publication.snapshot))
             if team_id and team_id not in {
                 a["team_id"] for a in snapshot["assignments"]
             }:
                 raise DomainError("not_found", "Ekip bulunamadı.", 404)
-            result = metrics(snapshot, team_id, skill_id)
+            result = metrics(
+                snapshot, team_id, skill_id, title, job_band, section, response_status
+            )
             result["report_info"] = {
                 "publication_id": pid,
                 "published_at": publication.published_at,
@@ -878,7 +921,16 @@ def create_app(settings=None, store=None, auth_service=None):
             filters = {
                 k: v
                 for k, v in p.get("filters", {}).items()
-                if k in ["team_id", "skill_id"]
+                if k
+                in [
+                    "team_id",
+                    "skill_id",
+                    "title",
+                    "job_band",
+                    "section",
+                    "response_status",
+                ]
+                and v
             }
             snapshot = filter_snapshot(s, publication.snapshot)
             if filters.get("team_id") and filters["team_id"] not in {
@@ -951,6 +1003,12 @@ def create_app(settings=None, store=None, auth_service=None):
     from .product import install_product_routes
 
     install_product_routes(app, store)
+    from .quality_routes import install_quality_routes
+
+    install_quality_routes(app, store)
+    from .policies import install_policy_routes
+
+    install_policy_routes(app, store)
     from .http_security import SecurityEnvelope
 
     app.add_middleware(SecurityEnvelope, store=store)

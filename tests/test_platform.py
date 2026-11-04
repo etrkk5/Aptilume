@@ -121,6 +121,11 @@ def test_scoring_math_quotes_and_missing_schema():
         "evidence_type": "scenario_reasoning",
         "review_flags": [],
         "limitations": [],
+        "quality": {
+            "category": "relevant",
+            "reason": "Soruya ilişkin yanıt.",
+            "evidence_quotes": [],
+        },
     }
     _, score, flags = validate_grade(raw, "kanıt burada", rub)
     assert score == pytest.approx(100 * 8 / 12) and flags == []

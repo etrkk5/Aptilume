@@ -95,6 +95,8 @@ class Store:
         self.control = engine_for(control_url)
         ControlBase.metadata.create_all(self.control)
         self.control_session = sessionmaker(self.control, expire_on_commit=False)
+        from .policies import ensure_default_policy
+
         if not settings.presentation_demo:
             with self.cs() as s:
                 if s.get(Setting, "presentation_demo") or s.scalar(
@@ -103,6 +105,7 @@ class Store:
                     .limit(1)
                 ):
                     raise RuntimeError("Demo kimlik deposu bu ortamda kullanılamaz.")
+        ensure_default_policy(self)
         self._engine, self._binding_version = None, None
         with self.cs() as s:
             if not s.get(Binding, "application_db"):

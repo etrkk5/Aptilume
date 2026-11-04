@@ -32,7 +32,7 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.3.1 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.4.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -50,6 +50,14 @@ docker compose -f compose.dev.yml exec -T api python -m app.cli demo-accounts
 ```
 
 Mod seçimi tek değerdir: `APP_MODE=demo` / `APP_MODE=production`. Değişiklikten sonra API, worker ve bootstrap yeniden başlatılmalıdır. Demo, DATA_DIR altında `presentation-demo/` kullanır; üretim kontrol deposu URL’sini ve şifreleme anahtarını devralmaz. Production demo hesap/deposunu ve mock değerlendirmeyi reddeder. Gerçek üretim için HTTPS, kalıcı Secret, güçlü bootstrap parola ve AD/LLM/DB bağlantıları ayrıca hazır olmalıdır. `compose.dev.yml` yerel sunum/geliştirme içindir; kurumsal deployment yerine geçmez. Ayrıntılı sunum sırası [DEMO.md](docs/DEMO.md) içinde.
+
+## İK talimatları, kalite kontrolü ve raporlama
+
+0.4.0 sürümünde İK, **Ölçüm politikası** ekranında soru üretimi ve yanıt değerlendirme talimatlarını aynı sayfadan düzenleyebilir. Hazırlanmış talimatlar demo/production için varsayılandır; her kayıt yeni sürüm oluşturur. İşler kuyruğa alındıkları politika sürümünü korur. Yeni ölçümde hedef ekipler ve “Tüm ekipler” seçimi vardır.
+
+Tüm anket soruları zorunludur. Kalite analizi yalnız dönem kapandıktan sonraki değerlendirmede yapılır. Anlamsız/ilgisiz/yetersiz veya talimat yönlendirmeli yanıtlar otomatik puan yerine İK'nın **Yanıt kalitesi** kuyruğuna alınır; gerekçeli İK kararı olmadan sonuç yayımlanmaz. Dürüst deneyimsizlik beyanı bir kalite ihlali değildir.
+
+Raporlarda dönem, ekip, unvan/rol, yetkinlik, bölüm, kademe ve yanıt durumu filtreleri; ekip karşılaştırması, katılım, puan/seviye dağılımı ve hedef farkları bulunur. Excel aynı kapsamı kullanır. Teknik ayrıntılar, metrik paydaları ve yükseltme için [0.4.0 rehberi](docs/FEATURES_0_4.md).
 
 ## Görünüm
 

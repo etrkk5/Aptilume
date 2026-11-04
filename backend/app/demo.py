@@ -157,3 +157,56 @@ def authenticate_demo(store, username, password):
             "invalid_credentials", "Kullanıcı adı veya parola hatalı.", 401
         )
     return identity.id
+
+
+def prepare_quality_sample(store):
+    """Optional additive presentation example; never usable against production data."""
+    require_demo(store)
+    from .models import Campaign
+    from .services import (
+        create_campaign,
+        enqueue_generation,
+        campaign_transition,
+        assignments,
+        form,
+        save_answer,
+        submit,
+        start_run,
+    )
+    from .worker import Worker
+
+    name = "Yanıt Kalitesi · Örnek"
+    with store.session() as s:
+        existing = s.scalar(select(Campaign).where(Campaign.name == name))
+        if existing:
+            return {"campaign_id": existing.id, "status": existing.status}
+    cid = create_campaign(
+        store, name, ["team-data"], participant_ids=["team-data-person-02"]
+    )["id"]
+    enqueue_generation(store, cid)
+    worker = Worker(store)
+    worker.drain()
+    campaign_transition(store, cid, "approve")
+    campaign_transition(store, cid, "open")
+    aid = assignments(store, cid)[0]["id"]
+    first = True
+    for question in form(store, aid)["questions"]:
+        if question["type"] == "open_text":
+            text = (
+                "asdfasdf"
+                if first
+                else "Kaynakları ve varsayımları kontrol eder, çıktıyı bağımsız kanıtlarla doğrular ve riskli kararları insan onayına sunarım."
+            )
+            first = False
+            value = {"text": text, "revision": 0}
+        else:
+            value = {
+                "selected": ["none" if question["type"] == "self_assessment" else "b"],
+                "revision": 0,
+            }
+        save_answer(store, aid, question["id"], value)
+    submit(store, aid)
+    campaign_transition(store, cid, "close")
+    run = start_run(store, cid)
+    worker.drain()
+    return {"campaign_id": cid, "run_id": run["id"], "status": "hr_review"}

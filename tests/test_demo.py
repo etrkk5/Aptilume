@@ -176,3 +176,17 @@ def test_demo_requires_explicit_bootstrap(tmp_path):
             demo=False,
             presentation_demo=True,
         )
+
+
+def test_optional_quality_sample_is_additive_idempotent_and_demo_only(demo_store):
+    from app.demo import prepare_quality_sample
+    from app.models import QualityIssue
+
+    sample = prepare_quality_sample(demo_store)
+    assert prepare_quality_sample(demo_store)["campaign_id"] == sample["campaign_id"]
+    with demo_store.session() as s:
+        assert len(list(s.scalars(select(Campaign)))) == 3
+        assert list(s.scalars(select(QualityIssue)))
+    demo_store.settings.presentation_demo = False
+    with pytest.raises(RuntimeError):
+        prepare_quality_sample(demo_store)

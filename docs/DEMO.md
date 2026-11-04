@@ -10,7 +10,7 @@ Sunum modu, üretim kimlik doğrulamasını gevşetmeden ayrı bir veri alanı k
 | `production` | Normal/kurumsal depolar, gerçek AD/LLM, HTTPS/CA, kalıcı Secret ve güçlü ilk parola kuralları. Demo kimlikleri, demo deposu ve mock değerlendirme reddedilir. Varsayılan mod budur. |
 | `development` / `test` | Geliştirme/test davranışı; sunum hesapları otomatik açılmaz. |
 
-Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.3.1` image ile:
+Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.4.0` image ile:
 
 ```bash
 docker compose -f compose.dev.yml up -d --no-build
@@ -47,3 +47,13 @@ Kurum ayarları hazır olduğunda `APP_MODE=production` yapıp bootstrap, API ve
 Demo modunda üretim `CONTROL_STORE_URL` ve `SECRET_ENCRYPTION_KEY` kullanılmaz; üretime dönünce normal ayarlar devreye girer. Demo verisi/hesabı üretime kopyalanmaz. Üretim deposuna yanlışlıkla demo kimliği kopyalanırsa API ve worker başlangıcı engellenir. Ayrı ortamlar için ayrı PVC/Secret kullanılması önerilir.
 
 Tek parametre modu seçer; gerçek AD, LLM, DB/CA, PUBLIC_BASE_URL, kalıcı anahtar, güçlü bootstrap parola, ağ/MFA ve kurum kabulünün yerini almaz. Önceki geliştirme deposunda admin/admin varsa üretim başlangıcı onu reddeder. Yerel Compose kurumsal deployment şablonu değildir. Güvenlik kabul listesi [SECURITY_REMEDIATION.md](SECURITY_REMEDIATION.md) içindedir.
+
+## 0.4.0 sunumuna eklenenler
+
+- İK: Ölçüm politikası sayfasında varsayılan soru/değerlendirme talimatlarını gösterin. Düzenleme taslaktır; yeni sürüm olarak kaydedilince yeni işlere uygulanır.
+- İK: Yanıt kalitesi menüsünde “Yanıt Kalitesi · Örnek” sentetik kaydını inceleyin. Karar kaydetmeden modalı kapatırsanız sunumda bekleyen örnek korunur. Gerekirse `demo-quality-sample` komutu örneği yalnız bir kez ekler.
+- Yeni ölçüm: “Tüm ekipler” ile toplu seçim/kaldırma; ayrıca tek tek seçim.
+- Çalışan: Tüm sorular zorunlu; boş sayfadan ilerleme engellenir. “Deneyimim yok” dürüst ve geçerli bir yanıttır.
+- Dashboard: Ekip/rol/yetkinlik/bölüm filtrelerini ve “Diğer filtreler” alanını gösterin; Excel seçili kapsamı taşır. Oranları yorumlarken geçerli kişi sayısını ve hedef ölçüm kapsamını birlikte okuyun.
+
+Detaylı akış ve yükseltme: [0.4.0 özellikleri](FEATURES_0_4.md).

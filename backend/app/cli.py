@@ -60,6 +60,7 @@ def main():
             "drain",
             "storage-migrate",
             "demo-accounts",
+            "demo-quality-sample",
         ],
     )
     p.add_argument("--profile-id")
@@ -106,6 +107,10 @@ def main():
         from .demo import demo_credentials
 
         print(json.dumps(demo_credentials(store), ensure_ascii=False, indent=2))
+    elif args.command == "demo-quality-sample":
+        from .demo import prepare_quality_sample
+
+        print(prepare_quality_sample(store))
     elif args.command == "seed":
         if not store.settings.demo:
             raise RuntimeError("Örnek veri üretimi üretim ortamında kapalı.")

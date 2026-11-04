@@ -219,8 +219,107 @@ def main():
             pass
         else:
             raise AssertionError("Runtime role unexpectedly has schema DDL permission")
+        # HR instruction version CAS and JSON cohort filters on PostgreSQL,
+        # using the same CRUD-only role as the runtime.
+        with limited.cs() as s:
+            s.add(
+                DirectoryUser(
+                    id="pg-policy-hr",
+                    username="pg-policy-hr",
+                    display_name="Fixture HR",
+                    roles=["hr"],
+                    groups=[],
+                    source="local",
+                )
+            )
+        hr_token, hr_actor = limited_auth.create_session("pg-policy-hr")
+        with TestClient(create_app(store=limited)) as c:
+            c.cookies.set(COOKIE, hr_token)
+            c.headers["X-CSRF-Token"] = hr_actor.csrf_token
+            active = c.get("/api/v1/prompt-policies").json()["active"]
+            changed = {
+                k: v + " PostgreSQL fixture policy."
+                for k, v in active["instructions"].items()
+            }
+            response = c.post(
+                "/api/v1/prompt-policies",
+                json={"expected_version": active["version"], "instructions": changed},
+            )
+            assert (
+                response.status_code == 201
+                and response.json()["version"] == active["version"] + 1
+            )
+            assert (
+                c.post(
+                    "/api/v1/prompt-policies",
+                    json={
+                        "expected_version": active["version"],
+                        "instructions": changed,
+                    },
+                ).status_code
+                == 409
+            )
+            quality_campaign = create_campaign(
+                limited,
+                "PG Quality fixture",
+                ["team-data"],
+                participant_ids=["team-data-person-02"],
+            )["id"]
+            enqueue_generation(limited, quality_campaign)
+            Worker(limited).drain()
+            campaign_transition(limited, quality_campaign, "approve")
+            campaign_transition(limited, quality_campaign, "open")
+            from app.services import assignments, form, save_answer, submit
+
+            aid = assignments(limited, quality_campaign)[0]["id"]
+            first = True
+            for question in form(limited, aid)["questions"]:
+                if question["type"] == "open_text":
+                    value = {
+                        "text": (
+                            "asdfasdf"
+                            if first
+                            else "Kaynakları kontrol eder ve bağımsız verilerle doğrularım."
+                        ),
+                        "revision": 0,
+                    }
+                    first = False
+                else:
+                    value = {
+                        "selected": [
+                            "none" if question["type"] == "self_assessment" else "b"
+                        ],
+                        "revision": 0,
+                    }
+                save_answer(limited, aid, question["id"], value)
+            submit(limited, aid)
+            campaign_transition(limited, quality_campaign, "close")
+            start_run(limited, quality_campaign)
+            Worker(limited).drain()
+            body = c.get(
+                "/api/v1/quality-cases",
+                params={"team_id": "team-data", "campaign_id": quality_campaign},
+            ).json()
+            assert body["total"] >= 1 and body["summary"]["people"] == 1
+            for case in body["items"]:
+                detail = c.get("/api/v1/quality-cases/" + case["id"]).json()
+                assert detail["category"] == "nonsensical" and detail["can_review"]
+                assert (
+                    c.post(
+                        "/api/v1/reviews/" + case["evaluation_id"] + "/decision",
+                        json={"score": 0, "reason": "Fixture HR quality decision."},
+                    ).status_code
+                    == 200
+                )
+            Worker(limited).drain()
+            assert (
+                c.get(
+                    "/api/v1/quality-cases", params={"campaign_id": quality_campaign}
+                ).json()["summary"]["pending"]
+                == 0
+            )
         print(
-            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role."
+            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role + HR policy versioning and quality decisions."
         )
 
 

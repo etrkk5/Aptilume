@@ -71,6 +71,15 @@ class Setting(ControlBase):
     value: Mapped[dict] = mapped_column(JSON)
 
 
+class PromptPolicy(ControlBase):
+    __tablename__ = "prompt_policies"
+    id: Mapped[str] = mapped_column(primary_key=True, default=uid)
+    version: Mapped[int] = mapped_column(unique=True)
+    instructions: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str]
+    created_at: Mapped[str] = mapped_column(default=now)
+
+
 class DirectoryUser(ControlBase):
     __tablename__ = "directory_users"
     id: Mapped[str] = mapped_column(primary_key=True)
@@ -331,6 +340,32 @@ class Evaluation(Base):
     flags: Mapped[list] = mapped_column(JSON, default=list)
     usage: Mapped[dict] = mapped_column(JSON, default=dict)
     review_status: Mapped[str] = mapped_column(default="clear")
+
+
+class RunPolicy(Base):
+    __tablename__ = "evaluation_policy_versions"
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey("evaluation_runs.id"), primary_key=True
+    )
+    policy_id: Mapped[str]
+    version: Mapped[int]
+
+
+class QualityIssue(Base):
+    __tablename__ = "answer_quality_cases"
+    id: Mapped[str] = mapped_column(primary_key=True, default=uid)
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("answer_evaluations.id"), unique=True
+    )
+    run_id: Mapped[str] = mapped_column(ForeignKey("evaluation_runs.id"), index=True)
+    answer_id: Mapped[str] = mapped_column(
+        ForeignKey("response_revisions.id"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(40))
+    reason: Mapped[str] = mapped_column(Text)
+    evidence_quotes: Mapped[list] = mapped_column(JSON, default=list)
+    source: Mapped[str] = mapped_column(String(12))
+    created_at: Mapped[str] = mapped_column(default=now, index=True)
 
 
 class ReviewDecision(Base):

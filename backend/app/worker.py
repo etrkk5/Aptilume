@@ -188,12 +188,30 @@ class Worker:
             ca_file=self.store.settings.llm_ca_file,
         )
         start = time.monotonic()
+        from .policies import policy, DEFAULT_POLICY_ID
+
+        instructions = policy(
+            self.store, job.payload.get("prompt_policy_id", DEFAULT_POLICY_ID)
+        )
         raw, usage = provider.complete(
-            "grade", payload, GradeOutput.model_json_schema()
+            "grade",
+            payload,
+            GradeOutput.model_json_schema(),
+            instructions=instructions["instructions"]["grade"],
         )
         grade, score, flags = validate_grade(raw, answer.text, q.rubric)
         if grade.evidence_type != payload["evidence_type"]:
             flags.append("evidence_type_mismatch")
+        from .quality import assess_quality
+
+        quality = assess_quality(answer.text, grade, bool(usage.get("simulated")))
+        if quality:
+            flags.append("answer_quality_" + quality["category"])
+            if not quality["evidence_quotes"]:
+                flags.append("quality_missing_evidence")
+            # A provisional quality concern must not silently become a score.
+            score = None
+            grade.status = "unscorable"
         with self.store.session() as s:
             current = get(s, Job, job.id)
             if (
@@ -224,6 +242,15 @@ class Worker:
                     ),
                 )
                 s.add(e)
+                if quality:
+                    s.flush()
+                    issue = QualityIssue(
+                        evaluation_id=e.id,
+                        run_id=job.run_id,
+                        answer_id=answer.id,
+                        **quality,
+                    )
+                    s.add(issue)
             s.add(
                 Call(
                     job_id=job.id,
@@ -275,7 +302,14 @@ class Worker:
                         run_id=rid,
                         kind="insights",
                         dedupe_key=f"insights:{rid}",
-                        payload={"profile_version": run.insight_profile_version},
+                        payload={
+                            "profile_version": run.insight_profile_version,
+                            "prompt_policy_id": (
+                                s.get(RunPolicy, run.id).policy_id
+                                if s.get(RunPolicy, run.id)
+                                else "default-v1"
+                            ),
+                        },
                     )
                 )
                 run.status = "validating"
@@ -290,12 +324,19 @@ class Worker:
             data = metrics(build_snapshot(s, job.run_id))
             data.pop("rows", None)
         config = self.store.resolve(version_id=job.payload["profile_version"])
+        from .policies import policy, DEFAULT_POLICY_ID
+
+        instructions = policy(
+            self.store, job.payload.get("prompt_policy_id", DEFAULT_POLICY_ID)
+        )
         value, _ = Provider(
             config,
             self.store.settings.allowed_hosts,
             allowed_cidrs=self.store.settings.allowed_cidrs,
             ca_file=self.store.settings.llm_ca_file,
-        ).complete("insights", data)
+        ).complete(
+            "insights", data, instructions=instructions["instructions"]["insights"]
+        )
         from .providers import InsightOutput
 
         value = InsightOutput.model_validate(value).model_dump()

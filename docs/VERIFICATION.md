@@ -1,3 +1,32 @@
+# Aptilume 0.4.0 — raporlama ve İK yönetişimi doğrulaması
+
+4 Kasım 2026. Önceki sürüm kayıtları aşağıda korunur. Ayrıntılı iş akışı ve migration notları [0.4.0 rehberindedir](FEATURES_0_4.md).
+
+| Kontrol | Sonuç |
+|---|---|
+| Python | **169 test geçti**, 3 mevcut bağımlılık deprecation uyarısı. Önceki güvenlik/erişim/transport regresyonları korunur. |
+| Yeni metrikler | Filtreler, yanıtlamayanların paydada tutulması, gerçekten atanmış soru setiyle uygunluk, eski snapshot uyumu, kişi bazında dağılım ve 5 farklı kişi bastırması doğrulandı. Excel ile dashboard aynı kapsam ve metrikleri verir. |
+| Rol formları | Aynı ekipte iki unvana farklı rol formu ve ortak bölümde aynı soru seti; yeni dönemde hedef ekip seçimi / Tümü UI kontrolü. |
+| Zorunlu sorular | Eksik, boş ve görünmez metinle teslim reddi; taslak kaydı korunur. Düzenlenebilir sayfalarda eksik soruyla ilerleme engellenir. |
+| Yanıt kalitesi | Kalite kaydı yalnız kapanış sonrası worker ile; tipli semantik model çıktısı ve temel anlamsız içerik kontrolü; kanıt alıntısı doğrulaması; otomatik skor yerine `None`; bekleyen incelemede yayın engeli. |
+| İK kararı | HR-only liste/detay ve puan kararı; yönetici/çalışan/admin reddi; açık puan zorunlu; kendi yanıtına karar reddi; tekrar karar 409; dürüst deneyimsizlik yanlış etiketlenmez. |
+| Talimatlar | Aynı varsayılanlar development/production; HR-only okuma/yazma; değişmez sürümler, eşzamanlı kayıt 201/409; kuyruktaki üretim/puanlama/özet işlerinin eski politika sürümünü koruması ve snapshot izi. |
+| PostgreSQL 16 | SQLite aktarımı, rol formları, worker/yayın/metrik/Excel ve kontrol deposu kotalarına ek olarak **CRUD-only runtime rolüyle İK politika sürüm kaydı, JSON ekip/dönem kalite filtreleri ve kalite puan kararı geçti**; DDL reddi korunur. İzole fixture TLS kapalıdır; kurum CA kabulü değildir. |
+| Web | TypeScript/Vite production build ve Black başarılı. ECharts modüler; bundle boyutu uyarı eşiğinin altında. Yeni grafikler açık/koyu temayı izler. |
+| Statik güvenlik | Bandit orta/yüksek önem ve güven eşiğinde 0 sonuç; önceki gerekçeli Pod bind istisnası korunur. |
+| Container CVE | Son amd64 ve arm64 arşivlerinde tüm seviyelerde 0 bildirim; ignore/VEX istisnası yok. Yerel tarama, 4 Kasım 2026 verisi. |
+| Tarayıcı | Rol/yetkinlik/bölüm/yanıt durumu, filtre temizleme ve boş kapsam; düzenlenebilir İK talimatları ve sentetik kalite kaydı; yeni form ekip seçimi ve üst logo kaldırılması kontrol edildi. |
+
+**Image:** `aptilume:0.4.0`, linux/amd64 + linux/arm64. Yerel manifest index:
+
+`sha256:14a97dde7195b3ea8af85ebe1b1faf6b0532937a18678153bd70e17f483235fe`
+
+Yerel demo eski hesabı/veriyi korur. “Yanıt Kalitesi · Örnek” adlı ek, kapalı ve yayımlanmamış sentetik dönem İK kuyruğunu göstermek için oluşturulmuştur. Policy varsayılan v1 korunur. Talimatlar `data/default-instructions.json` → kontrol deposu sürüm kaydı üzerinden kullanılır; geçmişte kaydedilmeyen politika sürümü için yeni sürüm uydurulmaz.
+
+Yükseltmede uygulama migration `0003` ve kontrol deposu yeni politika tablosu kurulum yetkisiyle hazırlanmalıdır. Runtime yalnız gerekli CRUD yetkileriyle çalışır. Gerçek AD/LLM/CA, model alaka/puan kalibrasyonu, MFA, OpenShift/ağ/Secret/SIEM ve kurum sızma/yük kabulü koşulları devam eder.
+
+---
+
 # Aptilume 0.3.1 — sunum modu ek doğrulaması
 
 4 Kasım 2026. Önceki güvenlik incelemesi aşağıda tarihsel kayıt olarak korunur. Bu sürüm açık `APP_MODE=demo` seçimini ve üretimden ayrı demo depolarını ekler.

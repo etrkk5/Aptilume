@@ -1,9 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import * as echarts from "echarts/core";
-import { BarChart } from "echarts/charts";
-import { GridComponent, TooltipComponent } from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
 import {
   Activity,
   ArrowDownToLine,
@@ -46,6 +42,7 @@ import { api } from "./client";
 import { useIdentity, Login } from "./identity";
 import { Button, Modal } from "./ui";
 import { ThemeSwitch } from "./theme";
+import { PolicyEditor, QualityInbox, qualityLabels } from "./governance";
 import {
   AccountPanel,
   DirectorySettings,
@@ -55,7 +52,12 @@ import {
   PersonalProfile,
   SecurityEvents,
 } from "./product-ui";
-echarts.use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
+import {
+  AnalyticsFilters,
+  Dashboard,
+  emptyReportFilters,
+  type ReportFilters,
+} from "./analytics";
 
 type Any = any;
 const API = "/api/v1";
@@ -113,21 +115,6 @@ function Empty({ title, text, action }: Any) {
     </div>
   );
 }
-function Chart({ option, height = 260 }: Any) {
-  const el = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!el.current) return;
-    const c = echarts.init(el.current);
-    c.setOption(option);
-    const ro = new ResizeObserver(() => c.resize());
-    ro.observe(el.current);
-    return () => {
-      ro.disconnect();
-      c.dispose();
-    };
-  }, [JSON.stringify(option)]);
-  return <div ref={el} style={{ height, width: "100%" }} />;
-}
 const nav = [
   ["overview", "Genel görünüm", LayoutDashboard],
   ["campaigns", "Ölçüm dönemleri", ClipboardList],
@@ -137,6 +124,8 @@ const nav = [
   ["development", "Gelişim planları", ListChecks],
   ["profile", "Profilim", UserRound],
   ["jobs", "Değerlendirmeler", Activity],
+  ["quality", "Yanıt kalitesi", ShieldCheck],
+  ["policy", "Ölçüm politikası", BookOpen],
   ["connections", "Bağlantı ayarları", Settings2],
 ] as const;
 
@@ -148,11 +137,16 @@ function App() {
   const [view, setView] = useState("overview"),
     [boot, setBoot] = useState<Any>(null),
     [selected, setSelected] = useState(""),
-    [report, setReport] = useState<Any>(null),
+    [reportResult, setReport] = useState<Any>(null),
     [team, setTeam] = useState(""),
     [toast, setToast] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [filters, setFilters] = useState<ReportFilters>({
+    ...emptyReportFilters,
+  });
+  const [reportOptions, setReportOptions] = useState<Any>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [detail, setDetail] = useState<Any>(null),
     [exportDetail, setExportDetail] = useState(false),
     [surveyCampaign, setSurveyCampaign] = useState("");
@@ -165,7 +159,8 @@ function App() {
   const availableNav = nav.filter(
     ([id]) =>
       user?.permissions.all_data ||
-      (user?.permissions.manage_business && id !== "connections") ||
+      (user?.permissions.manage_business &&
+        !["connections", "quality", "policy"].includes(id)) ||
       (user?.permissions.integrations && id === "connections") ||
       (user?.permissions.business && ["profile", "survey"].includes(id)),
   );
@@ -212,6 +207,10 @@ function App() {
     setReport(null);
     setSelected("");
     setTeam("");
+    setFilters({ ...emptyReportFilters });
+    setReportOptions(null);
+    setReportBusy(false);
+    reportRequest.current++;
     setDetail(null);
     setAccountMenu(false);
     setAccountPanel(false);
@@ -240,24 +239,46 @@ function App() {
     return () => window.removeEventListener("keydown", close);
   }, []);
   const campaign = boot?.campaigns.find((c: Any) => c.id === selected);
+  const appliedFilters = Object.fromEntries(
+    Object.entries({ team_id: team, ...filters }).filter(([, value]) => value),
+  );
+  const reportQuery = new URLSearchParams(appliedFilters).toString();
+  const requestKey = `${campaign?.publication_id || ""}?${reportQuery}`;
+  const report = reportResult?._requestKey === requestKey ? reportResult : null;
   async function refreshReport() {
     const key = identityKey.current,
       request = ++reportRequest.current;
-    if (campaign?.publication_id) {
-      try {
-        const result = await api(
-          `/reports/${campaign.publication_id}${team ? "?team_id=" + team : ""}`,
-        );
-        if (key === identityKey.current && request === reportRequest.current)
-          setReport(result);
-      } catch (e: Any) {
-        setError(e.message);
+    if (!campaign?.publication_id) {
+      setReport(null);
+      setReportBusy(false);
+      return;
+    }
+    setReportBusy(true);
+    try {
+      const result = await api(
+        `/reports/${campaign.publication_id}${reportQuery ? "?" + reportQuery : ""}`,
+      );
+      if (key === identityKey.current && request === reportRequest.current) {
+        setReport({ ...result, _requestKey: requestKey });
+        setReportOptions({
+          ...result.filter_options,
+          publication_id: campaign.publication_id,
+        });
+        setError("");
       }
-    } else setReport(null);
+    } catch (e: Any) {
+      if (key === identityKey.current && request === reportRequest.current) {
+        setError(e.message);
+        setReport(null);
+      }
+    } finally {
+      if (key === identityKey.current && request === reportRequest.current)
+        setReportBusy(false);
+    }
   }
   useEffect(() => {
     refreshReport();
-  }, [selected, campaign?.publication_id, team]);
+  }, [requestKey]);
   async function action(task: () => Promise<Any>, message?: string) {
     setBusy(true);
     try {
@@ -331,6 +352,9 @@ function App() {
                 <Icon size={19} />
                 {label}
                 {id === "catalog" && <span className="nav-count">42</span>}
+                {id === "quality" && boot.quality_pending > 0 && (
+                  <span className="nav-count">{boot.quality_pending}</span>
+                )}
               </button>
             </React.Fragment>
           ))}
@@ -374,7 +398,6 @@ function App() {
           </div>
           <div className="topbar-right">
             <ThemeSwitch />
-            <img src="/brand/yapi-kredi-logo.svg" alt="Yapı Kredi" />
             <button
               className="icon-btn"
               aria-label="Hesap menüsü"
@@ -399,6 +422,8 @@ function App() {
                       catalog: "Yetkinlik kataloğu",
                       survey: "Katılımcı anketleri",
                       jobs: "Toplu değerlendirmeler",
+                      quality: "Yanıt kalitesi incelemeleri",
+                      policy: "Ölçüm politikası ve talimatlar",
                       connections: "Entegrasyon yönetimi",
                       development: "Gelişim planları",
                       profile: "Yetkinlik profilim",
@@ -425,6 +450,10 @@ function App() {
                         "Active Directory, LLM modelleri ve veritabanı bağlantılarını yönetin.",
                       development:
                         "Ölçüm sonuçlarını sorumlusu ve tarihi belirli gelişim aksiyonlarına dönüştürün.",
+                      quality:
+                        "Dönem sonrası işaretlenen yanıtları inceleyin ve gerekçeli İK kararınızı kaydedin.",
+                      policy:
+                        "Soru üretimi ve değerlendirme talimatlarını sürümleyerek yönetin.",
                       profile:
                         "Kendi değerlendirmelerinizi, hedeflerinizi ve gelişim planlarınızı takip edin.",
                     } as Any
@@ -438,7 +467,7 @@ function App() {
                   action(async () => {
                     const e = await api("/exports", "POST", {
                       publication_id: campaign.publication_id,
-                      filters: { team_id: team || undefined },
+                      filters: appliedFilters,
                       detail: exportDetail,
                     });
                     notify(
@@ -462,7 +491,13 @@ function App() {
                   <select
                     aria-label="Ölçüm dönemi"
                     value={selected}
-                    onChange={(e) => setSelected(e.target.value)}
+                    onChange={(e) => {
+                      setSelected(e.target.value);
+                      setTeam("");
+                      setFilters({ ...emptyReportFilters });
+                      setReportOptions(null);
+                      setDetail(null);
+                    }}
                   >
                     {boot.campaigns.map((c: Any) => (
                       <option key={c.id} value={c.id}>
@@ -476,7 +511,10 @@ function App() {
                   <select
                     aria-label="Ekip filtresi"
                     value={team}
-                    onChange={(e) => setTeam(e.target.value)}
+                    onChange={(e) => {
+                      setTeam(e.target.value);
+                      setDetail(null);
+                    }}
                   >
                     <option value="">Tüm ekipler</option>
                     {boot.teams.map((t: Any) => (
@@ -505,22 +543,51 @@ function App() {
                 )}
                 <div className="toolbar-end">
                   <span className="live-dot" />
-                  {report
-                    ? "Yayımlanmış sonuç sürümü"
-                    : "Henüz sonuç yayımlanmadı"}
+                  {reportBusy
+                    ? "Rapor güncelleniyor…"
+                    : report
+                      ? "Yayımlanmış sonuç sürümü"
+                      : "Henüz sonuç yayımlanmadı"}
                 </div>
               </div>
-              {report ? (
+              {campaign?.publication_id && (
+                <AnalyticsFilters
+                  value={filters}
+                  options={
+                    reportOptions?.publication_id === campaign.publication_id
+                      ? reportOptions
+                      : {}
+                  }
+                  team={team}
+                  activeCount={Object.keys(appliedFilters).length}
+                  loading={reportBusy}
+                  onChange={(next: ReportFilters) => {
+                    setFilters(next);
+                    setDetail(null);
+                  }}
+                  onReset={() => {
+                    setFilters({ ...emptyReportFilters });
+                    setTeam("");
+                    setDetail(null);
+                  }}
+                />
+              )}
+              {reportBusy ? (
+                <div className="analytics-loading" role="status">
+                  <LoaderCircle className="spin" size={22} />
+                  Rapor filtrelere göre hazırlanıyor…
+                </div>
+              ) : report ? (
                 <Dashboard
                   report={report}
                   onPerson={setDetail}
-                  onAction={(title: string) =>
+                  onAction={(title: string, context?: Any) =>
                     setActionDraft({
                       title,
                       publication_id: report.publication_id,
-                      team_id: team,
+                      team_id: context?.team_id || team,
                       participant_id: "",
-                      skill_id: "",
+                      skill_id: context?.skill_id || "",
                       owner_name: user.display_name,
                       due_date: "",
                       notes: "",
@@ -570,6 +637,12 @@ function App() {
             />
           )}
           {view === "jobs" && <Jobs action={action} notify={notify} />}
+          {view === "quality" && user.permissions.all_data && (
+            <QualityInbox boot={boot} action={action} />
+          )}
+          {view === "policy" && user.permissions.all_data && (
+            <PolicyEditor action={action} />
+          )}
           {view === "connections" && (
             <>
               <DirectorySettings action={action} busy={busy} />
@@ -607,7 +680,7 @@ function App() {
           {toast}
         </div>
       )}
-      {detail && (
+      {detail && report && (
         <Modal
           title={detail.name + " · Yetkinlik profili"}
           onClose={() => setDetail(null)}
@@ -740,6 +813,18 @@ function App() {
                     ? "Yönettiğiniz çalışanlar"
                     : "Kendi profiliniz"}
               </dd>
+              <dt>Soru üretimi talimat sürümü</dt>
+              <dd>
+                {report.prompt_policy?.generation_version
+                  ? `v${report.prompt_policy.generation_version}`
+                  : "Eski sürümde kaydedilmemiş"}
+              </dd>
+              <dt>Değerlendirme talimat sürümü</dt>
+              <dd>
+                {report.prompt_policy?.evaluation_version
+                  ? `v${report.prompt_policy.evaluation_version}`
+                  : "Eski sürümde kaydedilmemiş"}
+              </dd>
               <dt>Puanlama yöntemi</dt>
               <dd>
                 Rubrik puanı, bilgi kontrolü ve öz beyan ayrı hesaplanır.
@@ -772,323 +857,21 @@ function App() {
   );
 }
 
-function Dashboard({
-  report: r,
-  onPerson,
-  onAction,
-  onCompare,
-  onParticipation,
-}: Any) {
-  const people = Array.from(
-    new Map(r.rows.map((x: Any) => [x.participant_id, x])).values(),
-  ) as Any[];
-  const teamNames = [
-    ...new Set<string>(r.aggregates.map((x: Any) => x.team_name)),
-  ];
-  const core = [
-    ...new Set<string>(
-      r.aggregates
-        .filter((x: Any) => x.section === "common")
-        .map((x: Any) => x.skill_name),
-    ),
-  ];
-  const bar = {
-    grid: { left: 35, right: 20, top: 25, bottom: 35 },
-    tooltip: { trigger: "axis", renderMode: "richText" },
-    xAxis: {
-      type: "category",
-      data: teamNames.map((x) => x.replace(" & ", "\n& ")),
-      axisLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { color: "#6b7b91", fontSize: 11, interval: 0 },
-    },
-    yAxis: {
-      type: "value",
-      max: 100,
-      splitLine: { lineStyle: { color: "#edf1f6" } },
-      axisLabel: { color: "#98a3b5" },
-    },
-    series: [
-      {
-        type: "bar",
-        barWidth: 42,
-        itemStyle: { color: "#0056a6", borderRadius: [5, 5, 0, 0] },
-        data: teamNames.map((t) => {
-          const v = r.aggregates.filter(
-            (x: Any) =>
-              x.team_name === t &&
-              x.section === "common" &&
-              x.written_score != null,
-          );
-          return v.length
-            ? v.reduce((a: number, b: Any) => a + b.written_score, 0) / v.length
-            : null;
-        }),
-      },
-    ],
-  };
-  const tiles = [
-    {
-      label: "Davet edilen çalışan",
-      value: fmt(r.assigned),
-      sub: "Seçili ölçüm dönemi kapsamı",
-      Icon: Users,
-      color: "blue",
-    },
-    {
-      label: "Anket katılımı",
-      value: `%${fmt(r.completion_rate, 1)}`,
-      sub: `${r.submitted} çalışan yanıtını gönderdi`,
-      Icon: ClipboardList,
-      color: "cyan",
-    },
-    {
-      label: "Ortak bölüm puanı",
-      value: fmt(r.common_score, 1),
-      sub: `100 üzerinden · ${r.common_n} geçerli kişi`,
-      Icon: BarChart3,
-      color: "purple",
-    },
-    {
-      label: "Yetkinlik kapsamı",
-      value: fmt(new Set(r.rows.map((x: Any) => x.skill_id)).size),
-      sub: "3 ortak + role özel yetkinlikler",
-      Icon: Target,
-      color: "amber",
-    },
-  ];
-  return (
-    <>
-      <div className="metrics-grid">
-        {tiles.map((t) => (
-          <section className="metric-card" key={t.label}>
-            <div className="metric-top">
-              <span>{t.label}</span>
-              <div className={`metric-icon ${t.color}`}>
-                <t.Icon size={18} />
-              </div>
-            </div>
-            <strong>{t.value}</strong>
-            <small>{t.sub}</small>
-          </section>
-        ))}
-      </div>
-      <div className="insight-strip">
-        <div className="sparkle-box">
-          <Sparkles size={22} />
-        </div>
-        <div>
-          <b>Veriyi gelişim fırsatına dönüştürün.</b>
-          <p>
-            {(!r.mock && r.insights?.summary) ||
-              `${r.assigned} katılımcının ${r.submitted} tanesi yanıtlarını gönderdi. Yetkinlik haritasından ekip sonuçlarına, gelişim odaklarından aksiyon planlarına ulaşabilirsiniz.`}
-          </p>
-        </div>
-      </div>
-      <div className="dashboard-grid">
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Ekiplerin ortak AI yetkinlikleri</h2>
-              <p>Aynı sorular ve aynı rubrikle karşılaştırma</p>
-            </div>
-            <span className="small-pill">0–100</span>
-          </div>
-          <Chart option={bar} />
-          <div className="chart-caption">
-            <span className="legend-dot" /> Ortak yazılı bölüm{" "}
-            <span className="muted">· En az 5 geçerli kişi</span>
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Katılım görünümü</h2>
-              <p>Yanıt toplama kapsamı</p>
-            </div>
-            <button
-              className="icon-btn"
-              aria-label="Katılım ayrıntılarını aç"
-              onClick={onParticipation}
-            >
-              <MoreHorizontal size={20} />
-            </button>
-          </div>
-          <div className="participation">
-            <div
-              className="donut"
-              style={{ "--pct": r.completion_rate + "%" } as Any}
-            >
-              <div>
-                <strong>%{fmt(r.completion_rate)}</strong>
-                <span>tamamlanma</span>
-              </div>
-            </div>
-            <div className="participation-legend">
-              <div>
-                <i className="legend-dot" />
-                Gönderildi<strong>{r.submitted}</strong>
-              </div>
-              <div>
-                <i className="legend-dot grey" />
-                Yanıt bekleniyor<strong>{r.assigned - r.submitted}</strong>
-              </div>
-            </div>
-          </div>
-          <div className="mini-note">
-            <ShieldCheck size={16} /> Katılım, yetkinlik puanından ayrı izlenir.
-          </div>
-        </section>
-      </div>
-      <section className="panel heatmap-panel">
-        <div className="panel-head">
-          <div>
-            <h2>Yetkinlik haritası</h2>
-            <p>Ekiplerin ortak bölümdeki yazılı yanıt puanları</p>
-          </div>
-          <div className="heatmap-scale">
-            <span>Düşük</span>
-            {["#edf3fa", "#d0e4f6", "#94bfe3", "#4a91cc", "#0056a6"].map(
-              (c) => (
-                <i style={{ background: c }} key={c} />
-              ),
-            )}
-            <span>Yüksek</span>
-          </div>
-        </div>
-        <table className="heat-table">
-          <thead>
-            <tr>
-              <th>Ekip</th>
-              {core.map((c) => (
-                <th key={c}>{c}</th>
-              ))}
-              <th>Geçerli kişi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {teamNames.map((t) => (
-              <tr key={t}>
-                <td>
-                  <div className="team-cell">
-                    <span className="team-symbol">{t[0]}</span>
-                    {t}
-                  </div>
-                </td>
-                {core.map((c) => {
-                  const a = r.aggregates.find(
-                    (x: Any) => x.team_name === t && x.skill_name === c,
-                  );
-                  const v = a?.written_score;
-                  return (
-                    <td key={c}>
-                      <div
-                        className="heat-cell"
-                        style={{
-                          background:
-                            v == null
-                              ? "var(--soft)"
-                              : `rgba(0,86,166,${0.08 + v / 160})`,
-                          color: v > 60 ? "white" : "#004587",
-                        }}
-                      >
-                        {fmt(v, 1)}
-                      </div>
-                    </td>
-                  );
-                })}
-                <td className="muted">
-                  {r.aggregates.find((x: Any) => x.team_name === t)?.n || 0}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <div className="dashboard-grid bottom-grid">
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Gelişim odakları</h2>
-              <p>Rol hedeflerini uygulamalı çalışmalarla destekleyin</p>
-            </div>
-            <Target size={20} />
-          </div>
-          {r.insights?.actions?.map((x: string, i: number) => (
-            <button
-              className="action-item action-button"
-              key={i}
-              onClick={() => onAction(x)}
-            >
-              <span>0{i + 1}</span>
-              <div>
-                <b>{x}</b>
-                <p>Skill Owner geri bildirimi ile ilerlemeyi izleyin.</p>
-              </div>
-              <ArrowUpRight size={18} />
-            </button>
-          ))}
-          {!r.insights?.actions?.length && (
-            <button
-              className="action-item action-button"
-              onClick={() => onAction("Yetkinlik gelişim planı")}
-            >
-              <span>01</span>
-              <div>
-                <b>Yetkinlik için gelişim planı oluşturun.</b>
-                <p>Katılımcı, sorumlu ve hedef tarihi belirleyin.</p>
-              </div>
-              <ArrowUpRight size={18} />
-            </button>
-          )}
-          <button className="action-item action-button" onClick={onCompare}>
-            <span>02</span>
-            <div>
-              <b>Öz beyan ve yazılı yanıtları birlikte inceleyin.</b>
-              <p>
-                İki gösterge farklı bilgi sağlar; tek puanda birleştirilmez.
-              </p>
-            </div>
-            <ArrowUpRight size={18} />
-          </button>
-        </section>
-        <section className="panel">
-          <div className="panel-head">
-            <div>
-              <h2>Katılımcı profilleri</h2>
-              <p>Çalışanların yetkinlik profillerini inceleyin</p>
-            </div>
-            <Users size={20} />
-          </div>
-          {people.slice(0, 4).map((p: Any, i: number) => (
-            <button
-              className="person-row"
-              key={p.participant_id}
-              onClick={() => onPerson(p)}
-            >
-              <span className={"person-avatar p" + i}>{p.name[0]}</span>
-              <span>
-                <b>{p.name}</b>
-                <small>{p.team_name}</small>
-              </span>
-              <ChevronRight size={17} />
-            </button>
-          ))}
-        </section>
-      </div>
-    </>
-  );
-}
-
 function Campaigns({ boot, action, busy, setView }: Any) {
   const [modal, setModal] = useState(false),
     [name, setName] = useState(""),
-    [qs, setQs] = useState<Any>(null);
+    [qs, setQs] = useState<Any>(null),
+    [campaignTeams, setCampaignTeams] = useState<string[]>([]);
   return (
     <>
       <div className="section-toolbar">
         <span className="muted">{boot.campaigns.length} ölçüm dönemi</span>
-        <Button onClick={() => setModal(true)}>
+        <Button
+          onClick={() => {
+            setCampaignTeams(boot.teams.map((t: Any) => t.id));
+            setModal(true);
+          }}
+        >
           <Plus size={17} /> Yeni ölçüm dönemi
         </Button>
       </div>
@@ -1224,7 +1007,11 @@ function Campaigns({ boot, action, busy, setView }: Any) {
               e.preventDefault();
               if (
                 await action(
-                  () => api("/campaigns", "POST", { name }),
+                  () =>
+                    api("/campaigns", "POST", {
+                      name,
+                      team_ids: campaignTeams,
+                    }),
                   "Ölçüm dönemi oluşturuldu.",
                 )
               ) {
@@ -1242,11 +1029,61 @@ function Campaigns({ boot, action, busy, setView }: Any) {
                 placeholder="Örn. AI Skills Baseline · Q1 2027"
               />
             </label>
-            <p className="muted">
-              Mevcut ekiplerin rol ve hedefleri bu döneme sabit bir kopya olarak
-              alınır.
-            </p>
-            <Button disabled={busy}>Dönemi oluştur</Button>
+            <fieldset className="campaign-team-picker">
+              <legend>Hedef ekipler</legend>
+              <label className="campaign-all-teams">
+                <input
+                  type="checkbox"
+                  aria-label="Tüm ekipler"
+                  checked={
+                    boot.teams.length > 0 &&
+                    campaignTeams.length === boot.teams.length
+                  }
+                  ref={(node) => {
+                    if (node)
+                      node.indeterminate =
+                        campaignTeams.length > 0 &&
+                        campaignTeams.length < boot.teams.length;
+                  }}
+                  onChange={(e) =>
+                    setCampaignTeams(
+                      e.target.checked ? boot.teams.map((t: Any) => t.id) : [],
+                    )
+                  }
+                />
+                <b>Tüm ekipler</b>
+                <small>
+                  {campaignTeams.length} / {boot.teams.length} ekip seçildi
+                </small>
+              </label>
+              {boot.teams.map((t: Any) => (
+                <label key={t.id}>
+                  <input
+                    type="checkbox"
+                    checked={campaignTeams.includes(t.id)}
+                    onChange={(e) =>
+                      setCampaignTeams((ids) =>
+                        e.target.checked
+                          ? [...ids, t.id]
+                          : ids.filter((id) => id !== t.id),
+                      )
+                    }
+                  />
+                  {t.name}
+                </label>
+              ))}
+            </fieldset>
+            <div className="notice">
+              <Sparkles size={18} />
+              <span>
+                Seçilen ekiplerin bağlamı, rol profilleri ve hedefleri döneme
+                sabitlenir. Sorular bu bağlamla üretilir; her çalışan atanmış
+                rol formunu alır. Ortak sorular karşılaştırılabilir kalır.
+              </span>
+            </div>
+            <Button disabled={busy || !campaignTeams.length}>
+              Dönemi oluştur
+            </Button>
           </form>
         </Modal>
       )}
@@ -1256,7 +1093,12 @@ function Campaigns({ boot, action, busy, setView }: Any) {
             {qs.map((q: Any, i: number) => (
               <article key={q.id}>
                 <span className="eyebrow">
-                  {i + 1} · {q.type} · {q.skill_id}
+                  {i + 1} ·{" "}
+                  {q.form_key === "common"
+                    ? "Ortak soru seti"
+                    : boot.role_profiles.find((r: Any) => r.id === q.form_key)
+                        ?.title || "Role özel soru seti"}{" "}
+                  · {q.type}
                 </span>
                 <h3>{q.prompt}</h3>
                 {q.rubric.map((r: Any) => (
@@ -1683,7 +1525,14 @@ function SurveyForm({ aid, back, notify }: Any) {
     [values, setValues] = useState<Record<string, Any>>({}),
     [saving, setSaving] = useState<Record<string, string>>({}),
     [page, setPage] = useState(0),
-    [sending, setSending] = useState(false);
+    [sending, setSending] = useState(false),
+    [showMissing, setShowMissing] = useState(false);
+  const isAnswered = (q: Any) =>
+    q.type === "open_text"
+      ? !!(current.current[q.id]?.text || "")
+          .replace(/[\u200B-\u200D\uFEFF]/g, "")
+          .trim()
+      : current.current[q.id]?.selected?.length === 1;
   const versions = useRef<Record<string, number>>({}),
     timers = useRef<Record<string, Any>>({}),
     queues = useRef<Record<string, Promise<Any>>>({}),
@@ -1747,6 +1596,13 @@ function SurveyForm({ aid, back, notify }: Any) {
     timers.current[q.id] = setTimeout(() => save(q.id).catch(() => {}), 650);
   }
   async function send() {
+    const missing = data.questions.findIndex((q: Any) => !isAnswered(q));
+    if (missing >= 0) {
+      setShowMissing(true);
+      setPage(Math.floor(missing / 5));
+      notify("Tüm sorular zorunludur. Eksik yanıtları tamamlayın.");
+      return;
+    }
     setSending(true);
     try {
       await Promise.all([...dirty.current].map(save));
@@ -1772,9 +1628,7 @@ function SurveyForm({ aid, back, notify }: Any) {
     data.assignment.status === "submitted" ||
     data.campaign.status !== "open" ||
     data.can_answer === false;
-  const answered = data.questions.filter(
-    (q: Any) => values[q.id]?.text?.trim() || values[q.id]?.selected?.length,
-  ).length;
+  const answered = data.questions.filter(isAnswered).length;
   return (
     <>
       <button
@@ -1804,8 +1658,8 @@ function SurveyForm({ aid, back, notify }: Any) {
           <div className="survey-side-note">
             <ShieldCheck size={20} />
             <p>
-              Yanıtlarınız otomatik kaydedilir. Deneyiminiz olmayan sorularda
-              bunu açıkça belirtebilirsiniz.
+              Tüm sorular zorunludur. Yanıtlarınız otomatik kaydedilir.
+              Deneyiminiz olmayan sorularda bunu açıkça belirtebilirsiniz.
             </p>
           </div>
           <Badge status={locked ? "submitted" : "open"} />
@@ -1821,7 +1675,11 @@ function SurveyForm({ aid, back, notify }: Any) {
           {data.questions
             .slice(page * 5, page * 5 + 5)
             .map((q: Any, i: number) => (
-              <section className="panel question-card" key={q.id}>
+              <section
+                id={`survey-question-${q.id}`}
+                className={`panel question-card ${showMissing && !isAnswered(q) && !locked ? "question-missing" : ""}`}
+                key={q.id}
+              >
                 <div className="question-number">
                   <span>{String(page * 5 + i + 1).padStart(2, "0")}</span>
                   <small>
@@ -1853,12 +1711,31 @@ function SurveyForm({ aid, back, notify }: Any) {
                   </span>
                 </div>
                 <span className="skill-tag">{q.skill_name}</span>
+                <span className="question-required">Zorunlu</span>
                 <h3>{q.prompt}</h3>
+                {showMissing && !isAnswered(q) && !locked && (
+                  <p
+                    className="question-error"
+                    id={`missing-${q.id}`}
+                    role="alert"
+                  >
+                    Bu soruyu yanıtlayın. Deneyiminiz yoksa açıkça
+                    belirtebilirsiniz.
+                  </p>
+                )}
                 {q.type === "open_text" ? (
                   <>
                     <textarea
                       aria-label={`Yanıt ${page * 5 + i + 1}`}
-                      disabled={locked}
+                      disabled={locked || sending}
+                      required
+                      aria-required="true"
+                      aria-invalid={showMissing && !isAnswered(q) && !locked}
+                      aria-describedby={
+                        showMissing && !isAnswered(q)
+                          ? `missing-${q.id}`
+                          : undefined
+                      }
                       maxLength={8000}
                       rows={6}
                       value={values[q.id]?.text || ""}
@@ -1884,7 +1761,9 @@ function SurveyForm({ aid, back, notify }: Any) {
                         <input
                           type="radio"
                           name={q.id}
-                          disabled={locked}
+                          disabled={locked || sending}
+                          required
+                          aria-required="true"
                           checked={!!values[q.id]?.selected?.includes(o.id)}
                           onChange={() => change(q, o.id)}
                         />
@@ -1898,8 +1777,11 @@ function SurveyForm({ aid, back, notify }: Any) {
           <div className="survey-pagination">
             <Button
               secondary
-              disabled={page === 0}
-              onClick={() => setPage(page - 1)}
+              disabled={page === 0 || sending}
+              onClick={() => {
+                setShowMissing(false);
+                setPage(page - 1);
+              }}
             >
               <ChevronLeft size={16} /> Önceki
             </Button>
@@ -1909,6 +1791,17 @@ function SurveyForm({ aid, back, notify }: Any) {
             {(page + 1) * 5 < data.questions.length ? (
               <Button
                 onClick={() => {
+                  if (
+                    !locked &&
+                    data.questions
+                      .slice(page * 5, page * 5 + 5)
+                      .some((q: Any) => !isAnswered(q))
+                  ) {
+                    setShowMissing(true);
+                    notify("Bu sayfadaki zorunlu soruları tamamlayın.");
+                    return;
+                  }
+                  setShowMissing(false);
                   setPage(page + 1);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
@@ -2116,8 +2009,25 @@ function Jobs({ action, notify }: Any) {
                       — {c.reason}
                     </p>
                   ))}
+                  {r.quality && (
+                    <div className="notice">
+                      <span>
+                        <b>
+                          {qualityLabels[r.quality.category] ||
+                            r.quality.category}
+                        </b>
+                        <br />
+                        {r.quality.reason}
+                        <br />
+                        Bu yanıt için İK tarafından açık puan kararı
+                        verilmelidir.
+                      </span>
+                    </div>
+                  )}
                   <label>
-                    Düzeltilmiş soru puanı (isteğe bağlı, 0–100)
+                    {r.quality
+                      ? "İK puan kararı (zorunlu, 0–100)"
+                      : "Düzeltilmiş soru puanı (isteğe bağlı, 0–100)"}
                     <input
                       type="number"
                       min="0"
@@ -2126,7 +2036,11 @@ function Jobs({ action, notify }: Any) {
                       onChange={(e) =>
                         setOverride({ ...override, [r.id]: e.target.value })
                       }
-                      placeholder="Boş bırakırsanız model puanı korunur"
+                      placeholder={
+                        r.quality
+                          ? "İK puan kararını girin"
+                          : "Boş bırakırsanız model puanı korunur"
+                      }
                     />
                   </label>
                   <label>
@@ -2139,12 +2053,17 @@ function Jobs({ action, notify }: Any) {
                   </label>
                   {r.can_review === false && (
                     <div className="notice">
-                      Kendi yanıtınızı onaylayamazsınız. Başka bir yetkili
-                      incelemeli.
+                      {r.quality
+                        ? "Bu kalite kaydı için yetkili başka bir İK kullanıcısı inceleme yapmalı."
+                        : "Kendi yanıtınızı onaylayamazsınız. Başka bir yetkili incelemeli."}
                     </div>
                   )}
                   <Button
-                    disabled={reason.length < 5 || r.can_review === false}
+                    disabled={
+                      reason.length < 5 ||
+                      r.can_review === false ||
+                      (r.quality && !override[r.id])
+                    }
                     onClick={async () => {
                       if (
                         await action(
