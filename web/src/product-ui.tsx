@@ -607,7 +607,7 @@ export function ActionEditor({ draft, boot, user, action, onClose }: any) {
   const [item, setItem] = useState({ ...draft }),
     [skills, setSkills] = useState<any[]>([]);
   useEffect(() => {
-    api("/skills").then(setSkills);
+    api("/skills?include_archived=true&compact=true").then(setSkills);
   }, []);
   const update = (key: string, value: any) =>
     setItem({ ...item, [key]: value });
@@ -706,11 +706,14 @@ export function ActionEditor({ draft, boot, user, action, onClose }: any) {
               onChange={(e) => update("skill_id", e.target.value)}
             >
               <option value="">Genel gelişim</option>
-              {skills.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              {skills
+                .filter((s) => !s.archived || s.id === item.skill_id)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.archived ? " (Arşivde)" : ""}
+                  </option>
+                ))}
             </select>
           </label>
           <label>

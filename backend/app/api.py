@@ -77,9 +77,11 @@ class ReviewInput(BaseModel):
 def create_app(settings=None, store=None, auth_service=None):
     store = store or Store(settings or Settings.from_env())
     store.settings.validate_web()
+    from .catalog import active_skill, skill_data
+
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.4.0",
+        version="0.5.0",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
@@ -311,7 +313,9 @@ def create_app(settings=None, store=None, auth_service=None):
                         )
                     )
                 ],
-                "skills_count": len(list(s.scalars(select(Skill.id)))),
+                "skills_count": s.scalar(
+                    select(func.count()).select_from(Skill).where(active_skill())
+                ),
                 "source_issues": (
                     json.loads((REFERENCE_DIR / "catalog.json").read_text())[
                         "import_issues"
@@ -322,19 +326,21 @@ def create_app(settings=None, store=None, auth_service=None):
             }
 
     @app.get("/api/v1/skills")
-    def skills():
+    def skills(include_archived: bool = False, compact: bool = False):
+        require_business()
         with store.session() as s:
-            return [
-                {
-                    "id": x.id,
-                    "code": x.code,
-                    "name": x.name,
-                    "definition": x.definition,
-                    "levels": x.levels,
-                    "owners": x.metadata_.get("owners", []),
-                }
-                for x in s.scalars(select(Skill).order_by(Skill.code))
-            ]
+            query = select(Skill).order_by(Skill.code)
+            if not include_archived:
+                query = query.where(active_skill())
+            result = [skill_data(row) for row in s.scalars(query)]
+            return (
+                [
+                    {k: v for k, v in row.items() if k not in {"levels", "definition"}}
+                    for row in result
+                ]
+                if compact
+                else result
+            )
 
     @app.post("/api/v1/catalog/import")
     def import_bundled():
@@ -381,9 +387,11 @@ def create_app(settings=None, store=None, auth_service=None):
         if not p.get("name") or not p.get("role"):
             raise DomainError("invalid_team", "Ekip adı ve rol gerekli.")
         with store.session() as s:
-            ids = {x for x in s.scalars(select(Skill.id))}
+            ids = set(s.scalars(select(Skill.id)))
+            active_ids = set(s.scalars(select(Skill.id).where(active_skill())))
         if any(
             x.get("skill_id") not in ids
+            or (x.get("applicable", True) and x.get("skill_id") not in active_ids)
             or x.get("target_level") not in range(1, 6)
             or x.get("criticality") not in range(1, 6)
             for x in p.get("targets", [])
@@ -1003,6 +1011,9 @@ def create_app(settings=None, store=None, auth_service=None):
     from .product import install_product_routes
 
     install_product_routes(app, store)
+    from .catalog import install_catalog_routes
+
+    install_catalog_routes(app, store)
     from .quality_routes import install_quality_routes
 
     install_quality_routes(app, store)

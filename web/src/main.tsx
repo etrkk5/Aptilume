@@ -42,6 +42,7 @@ import { api } from "./client";
 import { useIdentity, Login } from "./identity";
 import { Button, Modal } from "./ui";
 import { ThemeSwitch } from "./theme";
+import { CatalogManager } from "./catalog";
 import { PolicyEditor, QualityInbox, qualityLabels } from "./governance";
 import {
   AccountPanel,
@@ -351,7 +352,9 @@ function App() {
               >
                 <Icon size={19} />
                 {label}
-                {id === "catalog" && <span className="nav-count">42</span>}
+                {id === "catalog" && (
+                  <span className="nav-count">{boot.skills_count}</span>
+                )}
                 {id === "quality" && boot.quality_pending > 0 && (
                   <span className="nav-count">{boot.quality_pending}</span>
                 )}
@@ -442,7 +445,7 @@ function App() {
                       teams:
                         "Ekip bağlamı ve rol hedefleri, kişiselleştirilmiş soruların temelini oluşturur.",
                       catalog:
-                        "42 yetkinlik ve beş seviye ile kurum çapında tutarlı bir çerçeve.",
+                        "Yetkinlikleri ve beş seviye tanımını kurumun ihtiyaçlarına göre yönetin.",
                       survey:
                         "Açık uçlu sorularla yaklaşımınızı, kontrollerinizi ve deneyiminizi paylaşın.",
                       jobs: "Anket kapanışından sonra çalışan toplu işleri ve incelemeleri takip edin.",
@@ -627,7 +630,7 @@ function App() {
               <RoleProfiles boot={boot} action={action} user={user} />
             </>
           )}
-          {view === "catalog" && <Catalog />}
+          {view === "catalog" && <CatalogManager user={user} action={action} />}
           {view === "survey" && (
             <Survey
               boot={boot}
@@ -1122,80 +1125,11 @@ function Campaigns({ boot, action, busy, setView }: Any) {
   );
 }
 
-function Catalog() {
-  const [skills, setSkills] = useState<Any[]>([]),
-    [q, setQ] = useState(""),
-    [detail, setDetail] = useState<Any>(null);
-  useEffect(() => {
-    api("/skills").then(setSkills);
-  }, []);
-  return (
-    <>
-      <div className="section-toolbar">
-        <div className="search">
-          <Search size={17} />
-          <input
-            aria-label="Yetkinlik ara"
-            placeholder="Yetkinlik veya alan ara…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        <span className="muted">42 yetkinlik · 210 seviye tanımı</span>
-      </div>
-      <div className="catalog-grid">
-        {skills
-          .filter((s) =>
-            (s.name + " " + s.definition)
-              .toLocaleLowerCase("tr")
-              .includes(q.toLocaleLowerCase("tr")),
-          )
-          .map((s: Any) => (
-            <button
-              className="panel skill-card"
-              key={s.id}
-              onClick={() => setDetail(s)}
-            >
-              <div className="skill-top">
-                <span className="skill-code">
-                  {String(s.code).padStart(2, "0")}
-                </span>
-                <ArrowUpRight size={17} />
-              </div>
-              <h3>{s.name}</h3>
-              <p>{s.definition}</p>
-              <div className="skill-footer">
-                <span>5 yetkinlik seviyesi</span>
-                <ChevronRight size={15} />
-              </div>
-            </button>
-          ))}
-      </div>
-      {detail && (
-        <Modal title={detail.name} onClose={() => setDetail(null)}>
-          <div className="modal-body">
-            <p>{detail.definition}</p>
-            {detail.levels.map((x: Any) => (
-              <div className="level-item" key={x.level}>
-                <span>L{x.level}</span>
-                <div>
-                  <h3>{x.label}</h3>
-                  <p>{x.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Modal>
-      )}
-    </>
-  );
-}
-
 function Teams({ boot, action, user }: Any) {
   const [edit, setEdit] = useState<Any>(null),
     [skills, setSkills] = useState<Any[]>([]);
   useEffect(() => {
-    api("/skills").then(setSkills);
+    api("/skills?include_archived=true&compact=true").then(setSkills);
   }, []);
   return (
     <>
@@ -1237,6 +1171,8 @@ function Teams({ boot, action, user }: Any) {
                   <span>
                     {skills.find((s) => s.id === x.skill_id)?.name ||
                       x.skill_id}
+                    {skills.find((s) => s.id === x.skill_id)?.archived &&
+                      " (Arşivde)"}
                   </span>
                   <b>L{x.target_level}</b>
                 </div>
@@ -1347,11 +1283,13 @@ function Teams({ boot, action, user }: Any) {
                 }}
               >
                 <option value="">Yetkinlik seçin…</option>
-                {skills.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                {skills
+                  .filter((s) => !s.archived)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
               </select>
             </label>
             <div className="target-editor">
@@ -1360,6 +1298,8 @@ function Teams({ boot, action, user }: Any) {
                   <span>
                     {skills.find((s) => s.id === x.skill_id)?.name ||
                       x.skill_id}
+                    {skills.find((s) => s.id === x.skill_id)?.archived &&
+                      " (Arşivde)"}
                   </span>
                   <label>
                     Hedef
@@ -2579,7 +2519,7 @@ function RoleProfiles({ boot, action, user }: Any) {
     [person, setPerson] = useState<Any>(null),
     [skills, setSkills] = useState<Any[]>([]);
   useEffect(() => {
-    api("/skills").then(setSkills);
+    api("/skills?include_archived=true&compact=true").then(setSkills);
   }, []);
   const profiles = boot.role_profiles || [];
   const editableTeams = boot.teams.filter((t: Any) =>
@@ -2803,11 +2743,13 @@ function RoleProfiles({ boot, action, user }: Any) {
                 }}
               >
                 <option value="">Katalogdan seçin…</option>
-                {skills.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
+                {skills
+                  .filter((s) => !s.archived)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
               </select>
             </label>
             <div className="target-editor">
@@ -2816,6 +2758,8 @@ function RoleProfiles({ boot, action, user }: Any) {
                   <span>
                     {skills.find((s) => s.id === x.skill_id)?.name ||
                       x.skill_id}
+                    {skills.find((s) => s.id === x.skill_id)?.archived &&
+                      " (Arşivde)"}
                   </span>
                   <label>
                     Hedef

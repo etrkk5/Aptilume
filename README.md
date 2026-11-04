@@ -32,7 +32,7 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.4.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.5.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -170,3 +170,5 @@ Testler gerçek kurum endpointlerine bağlanmaz. Ayrıntılar: [doğrulama kayd�
 Kaynak katalog 42 yetkinlik, 210 seviye tanımı ve 126 eşleştirme içerir. Dokuz kaynak numara çelişkisi isim/alias eşleştirmesiyle çözülmüştür; 18 eksik kanıt kaynağı açık veri sorunu olarak korunur. Logo resmî Yapı Kredi varlığıdır; kaynak/hash `data/brand-source.json` içindedir.
 
 Yazılı puan, MCQ ve öz beyan ayrı göstergelerdir. Teknik hata sıfır puan sayılmaz. Seviye önerisi davranış göstergelerinden hesaplanır; 0–100 skor beşe bölünmez. L4/L5 başlangıç formuyla doğrulanmaz; doğrulanmış seviye boş kalır. Toplu grupta beşten az geçerli kayıt varsa puan bastırılır. Gerçek AD/LLM, kurumun ölçüm kalibrasyonu, OpenShift koşulları ve hedef yük kurum ortamında ayrıca doğrulanmalıdır.
+
+İK **Yetkinlik kataloğu** ekranından yetkinlik ekleyebilir, tanımı/sorumluları/L1–L5 seviyelerini düzenleyebilir, silebilir ve arşivden geri yükleyebilir. Geçmiş ölçümler kendi katalog sürümünü korur. [0.5.0 katalog rehberi](docs/FEATURES_0_5.md).

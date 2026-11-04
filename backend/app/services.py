@@ -214,6 +214,9 @@ def create_campaign(store, name, team_ids=None, participant_ids=None):
                 for key, value in cfg["role_snapshots"].items()
                 if key in role_ids
             }
+        from .catalog import freeze_skills
+
+        cfg["skill_snapshots"] = freeze_skills(s, cfg)
         campaign = Campaign(name=name, config=cfg)
         s.add(campaign)
         s.flush()
@@ -232,6 +235,10 @@ def enqueue_generation(store, campaign_id):
                 "Soru üretimi yalnızca taslak kampanyada başlatılır.",
                 409,
             )
+        if not c.config.get("skill_snapshots"):
+            from .catalog import freeze_skills
+
+            c.config = {**c.config, "skill_snapshots": freeze_skills(s, c.config)}
         profile = store.resolve("generation")
         job = s.scalar(select(Job).where(Job.dedupe_key == f"generate:{c.id}"))
         if job:
@@ -400,6 +407,8 @@ def generate_questions(store, job):
         allowed_cidrs=store.settings.allowed_cidrs,
         ca_file=store.settings.llm_ca_file,
     )
+    if cfg.get("skill_snapshots"):
+        catalog = cfg["skill_snapshots"]
     generated = []
     seen_common = False
     profiles = list(cfg.get("role_snapshots", {}).values()) or [
@@ -656,6 +665,12 @@ def form(store, aid):
         )
         answers = latest_answers(s, aid)
         skills = {x.id: x.name for x in s.scalars(select(Skill))}
+        skills.update(
+            {
+                sid: value["name"]
+                for sid, value in c.config.get("skill_snapshots", {}).items()
+            }
+        )
         questions = []
         for aq, q in rows:
             answer = answers.get(q.id)

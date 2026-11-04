@@ -128,9 +128,9 @@ class Provider:
                 ),
             )
         with limit:
-            return self._complete(task, payload, schema)
+            return self._complete(task, payload, schema, instructions)
 
-    def _complete(self, task, payload, schema=None):
+    def _complete(self, task, payload, schema=None, instructions=None):
         c = self.config
         if len(json.dumps(payload, ensure_ascii=False).encode()) > 262144:
             raise DomainError(

@@ -1,3 +1,20 @@
+# Aptilume 0.5.0 — yetkinlik kataloğu doğrulaması
+
+4 Kasım 2026. [Katalog yönetimi ve yükseltme rehberi](FEATURES_0_5.md). Önceki doğrulamalar aşağıda tarihsel kayıt olarak korunur.
+
+- **186 Python testi geçti**; son PostgreSQL sorgu düzeltmesinden sonra ilgili **47 test** tekrar geçti. Mevcut 3 bağımlılık deprecation uyarısı sürer.
+- İK ekleme/düzenleme/silme/geri yükleme; benzersiz ve değişmeyen kod, L1–L5 doğrulaması, arama/sayfalama, dinamik sayaç, audit ve eşzamanlı 200/409 kontrolü geçti. Çalışan, yönetici ve entegrasyon admininin yazma denemeleri 403 ile reddedildi.
+- Yeni yetkinlik rol hedefinde 22 soruluk üretime dahil edildi. Yeni dönem snapshot'ı, eski dönemlerin değişiklik öncesi bir defalık sabitlenmesi, arşivden sonra bekleyen dönem üretimi, mevcut form adlarının ve yayınlanmış sonuçların korunması doğrulandı. Arşivli hedefle yeni dönem açıklamalı 409 verir; ortak üç yetkinliğin silinmesi engellenir.
+- PostgreSQL 16: aktarım/işçi/yayın/Excel, kontrol deposu ve önceki İK akışlarına ek olarak, CRUD-only runtime rolünde katalog ekleme/düzenleme/silme/geri yükleme, JSON sürüm çakışması ve eski dönem snapshot'ı geçti. JSON sütunlarında DISTINCT yerine ID alt sorgusu kullanılır. İzole fixture TLS kapalıdır; kurum CA kabulü değildir.
+- Gerçek LLM HTTP adaptöründe İK talimatı aktarımı düzeltildi; iki endpoint biçiminde özel/varsayılan system talimatı ve zorunlu güvenlik sözleşmesinin birlikte gönderildiği 4 test geçti. Gerçek model kalitesi değerlendirmesi yapılmadı.
+- TypeScript/Vite üretim derlemesi ve Black başarılı; Bandit orta/yüksek önem ve güven eşiğinde 0 sonuç. Runtime bağımlılıkları değişmedi.
+- Tarayıcıda ayrı test alanında ekleme, ad/L3 düzenleme, arşiv filtresi, silme ve geri yükleme doğrulandı. Sunum alanındaki 42 aktif yetkinlik, hesaplar, talimatlar ve dönemler korunur; test yetkinliği sunum alanına eklenmedi.
+- Son linux/amd64 ve linux/arm64 paketlerinde Trivy tüm önem seviyelerinde 0 bildirim; ignore/VEX istisnası yok. Tarama 4 Kasım 2026 yerel verisiyle, image yüklenmeden yapılır. CI yeni veriyle tekrar tarar.
+
+**Image:** `aptilume:0.5.0`, linux/amd64 + linux/arm64. API ve worker birlikte güncellenir. Ek şema migration'ı yok; 0.4 kurulum gereksinimleri geçerli. Gerçek AD/LLM/CA, MFA, model kalibrasyonu, OpenShift ve kurum sızma/yük kabulü koşulları devam eder.
+
+---
+
 # Aptilume 0.4.0 — raporlama ve İK yönetişimi doğrulaması
 
 4 Kasım 2026. Önceki sürüm kayıtları aşağıda korunur. Ayrıntılı iş akışı ve migration notları [0.4.0 rehberindedir](FEATURES_0_4.md).

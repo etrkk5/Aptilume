@@ -144,7 +144,9 @@ def build_snapshot(s, run_id):
                 "team_id": team["id"],
                 "team_name": team["name"],
                 "skill_id": sid,
-                "skill_name": skill.name,
+                "skill_name": campaign.config.get("skill_snapshots", {})
+                .get(sid, {})
+                .get("name", skill.name),
                 "section": (
                     "common" if sid in campaign.config["common_skills"] else "role"
                 ),

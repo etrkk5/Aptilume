@@ -77,7 +77,7 @@ class TeamInput(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     role: str = Field(min_length=1, max_length=200)
     context: TeamContext = Field(default_factory=TeamContext)
-    targets: list[TargetInput] = Field(default_factory=list, max_length=42)
+    targets: list[TargetInput] = Field(default_factory=list, max_length=200)
 
 
 class RoleInput(BaseModel):
@@ -85,7 +85,7 @@ class RoleInput(BaseModel):
     team_id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=200)
     job_band: Literal["L1_L2", "L3_L4", "L5_L6"] = "L3_L4"
-    targets: list[TargetInput] = Field(default_factory=list, max_length=42)
+    targets: list[TargetInput] = Field(default_factory=list, max_length=200)
 
 
 class PersonInput(BaseModel):

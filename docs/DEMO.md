@@ -10,7 +10,7 @@ Sunum modu, üretim kimlik doğrulamasını gevşetmeden ayrı bir veri alanı k
 | `production` | Normal/kurumsal depolar, gerçek AD/LLM, HTTPS/CA, kalıcı Secret ve güçlü ilk parola kuralları. Demo kimlikleri, demo deposu ve mock değerlendirme reddedilir. Varsayılan mod budur. |
 | `development` / `test` | Geliştirme/test davranışı; sunum hesapları otomatik açılmaz. |
 
-Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.4.0` image ile:
+Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.5.0` image ile:
 
 ```bash
 docker compose -f compose.dev.yml up -d --no-build
@@ -57,3 +57,7 @@ Tek parametre modu seçer; gerçek AD, LLM, DB/CA, PUBLIC_BASE_URL, kalıcı ana
 - Dashboard: Ekip/rol/yetkinlik/bölüm filtrelerini ve “Diğer filtreler” alanını gösterin; Excel seçili kapsamı taşır. Oranları yorumlarken geçerli kişi sayısını ve hedef ölçüm kapsamını birlikte okuyun.
 
 Detaylı akış ve yükseltme: [0.4.0 özellikleri](FEATURES_0_4.md).
+
+## 0.5.0 katalog yönetimi
+
+İK hesabı → Yetkinlik kataloğu → Yetkinlik ekle. Ad, tanım ve beş seviye tanımını girin. Karttan **Düzenle**, **Yetkinliği sil** veya arşivde **Geri yükle** işlemlerini gösterin. Silme geçmişi korumak için arşivler; üç zorunlu ortak yetkinlik silinemez. Yeni yetkinliği Ekipler ve hedefler içindeki ekip/rol hedeflerine ekleyerek sonraki ölçümün üretimine dahil edin.

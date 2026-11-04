@@ -318,8 +318,73 @@ def main():
                 ).json()["summary"]["pending"]
                 == 0
             )
+            # Catalog uses JSON versions and legacy period snapshots with CRUD only.
+            from app.models import Campaign
+
+            with limited.session() as session:
+                legacy = session.get(Campaign, campaign["id"])
+                legacy.config = {
+                    k: v for k, v in legacy.config.items() if k != "skill_snapshots"
+                }
+            old = next(
+                row
+                for row in c.get("/api/v1/skills").json()
+                if row["id"] == "SKILL-005"
+            )
+            payload = {
+                k: old[k]
+                for k in (
+                    "code",
+                    "name",
+                    "definition",
+                    "levels",
+                    "owners",
+                    "domain",
+                    "family",
+                    "owner_department",
+                )
+            }
+            response = c.patch(
+                "/api/v1/skills/SKILL-005",
+                json={
+                    **payload,
+                    "name": "PostgreSQL catalog edit",
+                    "expected_version": 1,
+                },
+            )
+            assert response.status_code == 200, response.text
+            assert (
+                c.patch(
+                    "/api/v1/skills/SKILL-005", json={**payload, "expected_version": 1}
+                ).status_code
+                == 409
+            )
+            with limited.session() as session:
+                assert (
+                    session.get(Campaign, campaign["id"]).config["skill_snapshots"][
+                        "SKILL-005"
+                    ]["name"]
+                    == old["name"]
+                )
+                assert session.get(Publication, pid).snapshot["rows"] == report["rows"]
+            created = c.post(
+                "/api/v1/skills",
+                json={**payload, "code": 70, "name": "PostgreSQL new skill"},
+            )
+            assert created.status_code == 201, created.text
+            assert (
+                c.delete("/api/v1/skills/SKILL-070?expected_version=1").status_code
+                == 200
+            )
+            assert c.get("/api/v1/catalog/skills?status=archived").json()["total"] == 1
+            assert (
+                c.post(
+                    "/api/v1/skills/SKILL-070/restore?expected_version=2"
+                ).status_code
+                == 200
+            )
         print(
-            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role + HR policy versioning and quality decisions."
+            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role + HR policy versioning, quality decisions and catalog CRUD/snapshots."
         )
 
 
