@@ -1,0 +1,2 @@
+# Preserve the official logo byte-for-byte, including its source CRLF endings.
+web/public/brand/yapi-kredi-logo.svg -text whitespace=cr-at-eol

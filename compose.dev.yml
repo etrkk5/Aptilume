@@ -1,0 +1,41 @@
+name: aptilume
+services:
+  init:
+    image: aptilume:0.2.0
+    build: .
+    command: ["bootstrap"]
+    environment: &env
+      APP_MODE: development
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      DATA_DIR: /app/data
+      SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:-}
+      OUTBOUND_ALLOWED_HOSTS: ${OUTBOUND_ALLOWED_HOSTS:-}
+    volumes: ["aptilume-data:/app/data"]
+  api:
+    image: aptilume:0.2.0
+    command: ["api"]
+    depends_on:
+      init: {condition: service_completed_successfully}
+    environment: *env
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["aptilume-data:/app/data"]
+    read_only: true
+    tmpfs: ["/tmp:rw,size=128m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+  worker:
+    image: aptilume:0.2.0
+    command: ["worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      api: {condition: service_healthy}
+    environment: *env
+    volumes: ["aptilume-data:/app/data"]
+    read_only: true
+    tmpfs: ["/tmp:rw,size=128m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+volumes:
+  aptilume-data:
