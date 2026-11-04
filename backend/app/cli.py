@@ -59,6 +59,7 @@ def main():
             "migrate",
             "drain",
             "storage-migrate",
+            "demo-accounts",
         ],
     )
     p.add_argument("--profile-id")
@@ -90,11 +91,21 @@ def main():
             target_id=args.profile_id,
         )
     elif args.command == "bootstrap":
-        load_catalog(store)
+        if store.settings.presentation_demo:
+            from .demo import prepare_demo
+
+            prepare_demo(store)
+        else:
+            load_catalog(store)
         from .security import AuthService
 
         AuthService(store)
         print("Katalog ve ilk kurulum hesabı hazır.")
+    elif args.command == "demo-accounts":
+        import json
+        from .demo import demo_credentials
+
+        print(json.dumps(demo_credentials(store), ensure_ascii=False, indent=2))
     elif args.command == "seed":
         if not store.settings.demo:
             raise RuntimeError("Örnek veri üretimi üretim ortamında kapalı.")

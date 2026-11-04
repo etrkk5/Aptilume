@@ -43,7 +43,7 @@ from test_access import (
 from app.services import seed_answers, campaign_transition, start_run
 
 
-@pytest.mark.parametrize("mode", ["prodution", "prod", "DEVELOPMENT", "", "demo"])
+@pytest.mark.parametrize("mode", ["prodution", "prod", "DEVELOPMENT", "", "DEMO"])
 def test_unknown_environment_never_relaxes_security(monkeypatch, mode):
     monkeypatch.setenv("APP_MODE", mode)
     with pytest.raises(RuntimeError):

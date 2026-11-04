@@ -20,3 +20,4 @@ outputs/
 *.pem
 *.key
 .pnpm-store/
+demo-access.json

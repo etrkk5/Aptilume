@@ -32,11 +32,24 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.3.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.3.1 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
 Compose API ve worker başlatır, veriyi kalıcı `aptilume_aptilume-data` volume’unda tutar. `compose.dev.yml` yerel geliştirme içindir. `seed` komutu yalnızca izole test/geliştirme ortamına sentetik örnek veriler ekler; üretimde kapalıdır. Önceki sürümden kalan yerel örnek veriler otomatik silinmez.
+
+## Sunum modu ve dört rol hesabı
+
+`APP_MODE=demo` izole sunum deposunu, dört şifreli rol hesabını, 30 sentetik çalışanı, yayımlanmış sonuçları ve açık bir anketi hazırlar. Kurulum, hesapları tekrar oluşturmaz veya sunumdaki düzenlemeleri sıfırlamaz. Kullanıcılar `hr`, `employee`, `admin`, `manager`; her birinin parolası ilk bootstrap sırasında rastgele üretilir ve yalnızca işletim komutundan okunur. Parolalar Git’e veya web/API yanıtlarına yazılmaz.
+
+Yerel `.env` dosyasına `APP_MODE=demo` yazın, güncel image ile Compose’u başlatın. Parolaları görmek için:
+
+```bash
+docker compose -f compose.dev.yml up -d --no-build
+docker compose -f compose.dev.yml exec -T api python -m app.cli demo-accounts
+```
+
+Mod seçimi tek değerdir: `APP_MODE=demo` / `APP_MODE=production`. Değişiklikten sonra API, worker ve bootstrap yeniden başlatılmalıdır. Demo, DATA_DIR altında `presentation-demo/` kullanır; üretim kontrol deposu URL’sini ve şifreleme anahtarını devralmaz. Production demo hesap/deposunu ve mock değerlendirmeyi reddeder. Gerçek üretim için HTTPS, kalıcı Secret, güçlü bootstrap parola ve AD/LLM/DB bağlantıları ayrıca hazır olmalıdır. `compose.dev.yml` yerel sunum/geliştirme içindir; kurumsal deployment yerine geçmez. Ayrıntılı sunum sırası [DEMO.md](docs/DEMO.md) içinde.
 
 ## Görünüm
 

@@ -21,9 +21,12 @@ class Settings:
     llm_ca_file: str = ""
     export_retention_days: int = 7
     audit_retention_days: int = 90
+    presentation_demo: bool = False
 
     def __post_init__(self):
         self.data_dir = Path(self.data_dir).resolve()
+        if self.presentation_demo and not self.demo:
+            raise RuntimeError("Sunum modu production ile birlikte kullanılamaz.")
         if (
             not 1 <= self.export_retention_days <= 90
             or not 7 <= self.audit_retention_days <= 365
@@ -49,13 +52,21 @@ class Settings:
     @classmethod
     def from_env(cls):
         mode = os.getenv("APP_MODE", "production")
-        if mode not in {"production", "development", "test"}:
-            raise RuntimeError("APP_MODE production, development veya test olmalı.")
+        if mode not in {"production", "development", "test", "demo"}:
+            raise RuntimeError(
+                "APP_MODE production, development, test veya demo olmalı."
+            )
         path = Path(os.getenv("DATA_DIR", str(ROOT / "runtime"))).resolve()
+        if mode == "demo":
+            path = path / "presentation-demo"
         return cls(
             path,
-            os.getenv("CONTROL_STORE_URL", f"sqlite:///{path / 'control.db'}"),
-            os.getenv("SECRET_ENCRYPTION_KEY"),
+            (
+                f"sqlite:///{path / 'control.db'}"
+                if mode == "demo"
+                else os.getenv("CONTROL_STORE_URL", f"sqlite:///{path / 'control.db'}")
+            ),
+            None if mode == "demo" else os.getenv("SECRET_ENCRYPTION_KEY"),
             os.getenv("OUTBOUND_ALLOWED_HOSTS", ""),
             mode != "production",
             os.getenv("PUBLIC_BASE_URL", ""),
@@ -65,4 +76,5 @@ class Settings:
             os.getenv("LLM_CA_FILE", ""),
             int(os.getenv("EXPORT_RETENTION_DAYS", "7")),
             int(os.getenv("AUDIT_RETENTION_DAYS", "90")),
+            mode == "demo",
         )

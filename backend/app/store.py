@@ -16,6 +16,8 @@ from .models import (
     Campaign,
     Run,
     Job,
+    DirectoryUser,
+    Setting,
     uid,
 )
 
@@ -93,6 +95,14 @@ class Store:
         self.control = engine_for(control_url)
         ControlBase.metadata.create_all(self.control)
         self.control_session = sessionmaker(self.control, expire_on_commit=False)
+        if not settings.presentation_demo:
+            with self.cs() as s:
+                if s.get(Setting, "presentation_demo") or s.scalar(
+                    select(DirectoryUser.id)
+                    .where(DirectoryUser.source == "demo")
+                    .limit(1)
+                ):
+                    raise RuntimeError("Demo kimlik deposu bu ortamda kullanılamaz.")
         self._engine, self._binding_version = None, None
         with self.cs() as s:
             if not s.get(Binding, "application_db"):

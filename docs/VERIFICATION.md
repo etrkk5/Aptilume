@@ -1,3 +1,19 @@
+# Aptilume 0.3.1 — sunum modu ek doğrulaması
+
+4 Kasım 2026. Önceki güvenlik incelemesi aşağıda tarihsel kayıt olarak korunur. Bu sürüm açık `APP_MODE=demo` seçimini ve üretimden ayrı demo depolarını ekler.
+
+- **131 test geçti**, 3 mevcut bağımlılık deprecation uyarısı. Yeni 12 regresyon: mod/depo seçimi, üretim URL/anahtarını devralmama, dört rolün gerçek giriş ve kapsamı, Argon2 hash, yanlış parola, tekrarlı bootstrap, web'den parola dosyasına erişememe ve kopyalanmış demo deposu/oturumunun production API/worker tarafından reddi.
+- Dört rol hesabı ile sunucu kapsamı: İK 30, yönetici 10, çalışan 1, admin 0 kişi; admin yalnız entegrasyonlar. Kurulum 30 kişi + 2 dönem; tekrar başlatma hesap/parola ve düzenlemeleri korur.
+- `aptilume:0.3.1` linux/amd64 + linux/arm64 üretildi. Manifest index: `sha256:64653a0060496a79dcd0f3a22211ebd8110652939dbf166ef77ae47e073c351f`.
+- Yerel API ve worker 0.3.1 ile demo modunda sağlıklı çalışır. Gerçek eski veri alanı korunur; sunum verisi DATA_DIR/presentation-demo içindedir.
+- Tarayıcıda çalışan profili/açık 22 soruluk form ve İK genel görünümü doğrulandı. Örnek anket sunum için gönderilmeden bırakıldı.
+- Parolalar rastgele üretilir, Git'e girmez. Kontrollü demo kurtarma dosyası yalnız yerel demo alanındadır; production bu kaynağı kabul etmez. `demo-accounts` yalnız demo modunda işletim komutudur.
+- Black ve Bandit orta/yüksek eşik kontrolü başarılı. Mevcut otomatik CI, bu sürümü de test, bağımlılık/image taraması, build ve PostgreSQL kabulünden geçirir; durum Actions'tan izlenir.
+
+Sunum akışı ve tek parametreyle mod seçimi [DEMO.md](DEMO.md) içindedir. Gerçek AD/LLM/CA, MFA ve OpenShift kurum kabul koşulları devam eder.
+
+---
+
 # Aptilume 0.3.0 doğrulama kaydı
 
 **4 Kasım 2026.** Güvenlik incelemesi [ilk bulgular](SECURITY_REVIEW.md) ve [uygulama sonuçları](SECURITY_REMEDIATION.md) olarak ayrı tutulur.

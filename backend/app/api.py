@@ -71,7 +71,7 @@ def create_app(settings=None, store=None, auth_service=None):
     store.settings.validate_web()
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.3.0",
+        version="0.3.1",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,

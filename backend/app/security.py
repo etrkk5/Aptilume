@@ -119,6 +119,10 @@ def actor_for_user(store, user_id, csrf="", authenticated_at=0):
             raise DomainError(
                 "session_invalid", "Oturum geçerli değil. Yeniden giriş yapın.", 401
             )
+        if user.source == "demo" and not store.settings.presentation_demo:
+            raise DomainError(
+                "session_invalid", "Demo oturumu bu ortamda geçersiz.", 401
+            )
         roles = frozenset(user.roles)
         allowed = set()
         if roles & {"hr", "manager", "employee"} and user.participant_id:
@@ -161,6 +165,14 @@ class AuthService:
         self.store = store
         self.client_factory = client_factory
         with store.cs() as s:
+            if store.settings.presentation_demo:
+                if not s.get(Setting, "presentation_demo"):
+                    raise RuntimeError("Sunum verisi için önce bootstrap çalıştırın.")
+                return
+            if s.get(Setting, "presentation_demo") or s.scalar(
+                select(DirectoryUser.id).where(DirectoryUser.source == "demo").limit(1)
+            ):
+                raise RuntimeError("Demo kimlik deposu bu ortamda kullanılamaz.")
             admin = s.get(DirectoryUser, "local-admin")
             if not admin:
                 pwd = os.getenv(
@@ -217,7 +229,11 @@ class AuthService:
                 429,
             )
         try:
-            if username.casefold() == "admin":
+            if self.store.settings.presentation_demo:
+                from .demo import authenticate_demo
+
+                user_id = authenticate_demo(self.store, username, password)
+            elif username.casefold() == "admin":
                 with self.store.cs() as session:
                     identity = session.get(DirectoryUser, "local-admin")
                 try:
