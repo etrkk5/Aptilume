@@ -1,4 +1,4 @@
-"""Authorization is derived from the server session and AD reporting graph."""
+"""Authorization is derived from the server session and identity reporting graph."""
 
 from sqlalchemy import select
 from .models import *

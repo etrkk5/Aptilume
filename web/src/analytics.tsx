@@ -1,3 +1,11 @@
+import {
+  t,
+  translateNode,
+  formatLocale,
+  useLocale,
+  translateChart,
+  getLocale,
+} from "./i18n";
 import React, { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts/core";
 import { BarChart, PieChart } from "echarts/charts";
@@ -22,7 +30,6 @@ import {
   Info,
   ListChecks,
 } from "lucide-react";
-
 echarts.use([
   BarChart,
   PieChart,
@@ -43,13 +50,14 @@ export type ReportFilters = typeof emptyReportFilters;
 const fmt = (value: Any, digits = 1) =>
   value == null
     ? "—"
-    : Number(value).toLocaleString("tr-TR", { maximumFractionDigits: digits });
+    : Number(value).toLocaleString(formatLocale(), {
+        maximumFractionDigits: digits,
+      });
 const states: Any = {
   not_started: "Başlamadı",
   draft: "Taslak",
   submitted: "Gönderildi",
 };
-
 export function AnalyticsFilters({
   value,
   options,
@@ -110,75 +118,89 @@ export function AnalyticsFilters({
   return (
     <section
       className="analytics-filters"
-      aria-label="Rapor filtreleri"
+      aria-label={t("Rapor filtreleri")}
       aria-busy={loading}
     >
       <div className="analytics-filter-heading">
         <div>
           <SlidersHorizontal size={17} />
-          <b>Raporu keşfedin</b>
+          <b>{t("Raporu ke\u015Ffedin")}</b>
           <span>
-            {activeCount
-              ? `${activeCount} filtre etkin`
-              : "Tüm erişim kapsamınız"}
+            {translateNode(
+              activeCount
+                ? `${activeCount} filtre etkin`
+                : "Tüm erişim kapsamınız",
+            )}
           </span>
         </div>
         <button className="text-btn" disabled={!activeCount} onClick={onReset}>
-          <RotateCcw size={14} /> Filtreleri temizle
+          <RotateCcw size={14} />
+          {t(" Filtreleri temizle ")}
         </button>
       </div>
       <div className="analytics-filter-grid">
-        {fields.slice(0, 3).map(([key, label, all, entries]) => (
-          <label key={key}>
-            {label}
-            <select
-              aria-label={`${label} filtresi`}
-              value={value[key]}
-              onChange={(e) => update(key, e.target.value)}
-            >
-              <option value="">{all}</option>
-              {entries.map(([id, name]: string[]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      <details className="analytics-more-filters">
-        <summary>Diğer filtreler · Kademe ve yanıt durumu</summary>
-        <div className="analytics-filter-grid">
-          {fields.slice(3).map(([key, label, all, entries]) => (
+        {translateNode(
+          fields.slice(0, 3).map(([key, label, all, entries]) => (
             <label key={key}>
-              {label}
+              {translateNode(label)}
               <select
-                aria-label={`${label} filtresi`}
+                aria-label={t(`${label} filtresi`)}
                 value={value[key]}
                 onChange={(e) => update(key, e.target.value)}
               >
-                <option value="">{all}</option>
-                {entries.map(([id, name]: string[]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                ))}
+                <option value="">{translateNode(all)}</option>
+                {translateNode(
+                  entries.map(([id, name]: string[]) => (
+                    <option key={id} value={id}>
+                      {translateNode(name)}
+                    </option>
+                  )),
+                )}
               </select>
             </label>
-          ))}
+          )),
+        )}
+      </div>
+      <details className="analytics-more-filters">
+        <summary>
+          {t("Di\u011Fer filtreler \u00B7 Kademe ve yan\u0131t durumu")}
+        </summary>
+        <div className="analytics-filter-grid">
+          {translateNode(
+            fields.slice(3).map(([key, label, all, entries]) => (
+              <label key={key}>
+                {translateNode(label)}
+                <select
+                  aria-label={t(`${label} filtresi`)}
+                  value={value[key]}
+                  onChange={(e) => update(key, e.target.value)}
+                >
+                  <option value="">{translateNode(all)}</option>
+                  {translateNode(
+                    entries.map(([id, name]: string[]) => (
+                      <option key={id} value={id}>
+                        {translateNode(name)}
+                      </option>
+                    )),
+                  )}
+                </select>
+              </label>
+            )),
+          )}
         </div>
       </details>
       <div className="analytics-filter-note">
         <ShieldCheck size={14} />
         <span>
-          Filtreler yalnızca yetkili olduğunuz kişilerde uygulanır. Excel aynı
-          kapsamı kullanır.{team ? " Ekip kapsamı daraltıldı." : ""}
+          {t(
+            " Filtreler yaln\u0131zca yetkili oldu\u011Funuz ki\u015Filerde uygulan\u0131r. Excel ayn\u0131 kapsam\u0131 kullan\u0131r.",
+          )}
+          {translateNode(team ? " Ekip kapsamı daraltıldı." : "")}
         </span>
       </div>
     </section>
   );
 }
-
 function useChartColors() {
   const read = () => document.documentElement.dataset.theme === "dark";
   const [dark, setDark] = useState(read);
@@ -201,6 +223,7 @@ function useChartColors() {
   };
 }
 function Chart({ option, label, height = 260 }: Any) {
+  const language = useLocale();
   const ref = useRef<HTMLDivElement>(null),
     instance = useRef<Any>(null);
   useEffect(() => {
@@ -214,13 +237,13 @@ function Chart({ option, label, height = 260 }: Any) {
     };
   }, []);
   useEffect(() => {
-    instance.current?.setOption(option, { notMerge: true });
-  }, [JSON.stringify(option)]);
+    instance.current?.setOption(translateChart(option), { notMerge: true });
+  }, [JSON.stringify(option), language]);
   return (
     <div
       ref={ref}
       role="img"
-      aria-label={label}
+      aria-label={t(label)}
       style={{ width: "100%", height }}
     />
   );
@@ -232,8 +255,8 @@ function NoChart({
   return (
     <div className="analytics-no-chart">
       <ShieldCheck size={24} />
-      <p>{text}</p>
-      <span>{note}</span>
+      <p>{translateNode(text)}</p>
+      <span>{translateNode(note)}</span>
     </div>
   );
 }
@@ -242,34 +265,39 @@ function ChartPanel({ title, subtitle, children, note, data }: Any) {
     <section className="panel analytics-chart-panel">
       <div className="panel-head">
         <div>
-          <h2>{title}</h2>
-          <p>{subtitle}</p>
+          <h2>{translateNode(title)}</h2>
+          <p>{translateNode(subtitle)}</p>
         </div>
       </div>
-      {children}
-      <div className="analytics-chart-note">{note}</div>
-      {data && (
-        <details className="analytics-chart-data">
-          <summary>Grafik verilerini göster</summary>
-          <div className="analytics-table-scroll">
-            <table>
-              <tbody>
-                {data.map((row: Any[], i: number) => (
-                  <tr key={i}>
-                    {row.map((cell, j) => (
-                      <td key={j}>{cell}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
+      {translateNode(children)}
+      <div className="analytics-chart-note">{translateNode(note)}</div>
+      {translateNode(
+        data && (
+          <details className="analytics-chart-data">
+            <summary>{t("Grafik verilerini g\u00F6ster")}</summary>
+            <div className="analytics-table-scroll">
+              <table>
+                <tbody>
+                  {translateNode(
+                    data.map((row: Any[], i: number) => (
+                      <tr key={i}>
+                        {translateNode(
+                          row.map((cell, j) => (
+                            <td key={j}>{translateNode(cell)}</td>
+                          )),
+                        )}
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        ),
       )}
     </section>
   );
 }
-
 export function Dashboard({
   report: r,
   onPerson,
@@ -456,7 +484,9 @@ export function Dashboard({
     ],
     [
       "Anket katılımı",
-      `%${fmt(r.completion_rate)}`,
+      getLocale() === "en"
+        ? `${fmt(r.completion_rate)}%`
+        : `%${fmt(r.completion_rate)}`,
       `${r.submitted} gönderildi · ${r.assigned - r.submitted} bekleniyor`,
       ClipboardList,
       "cyan",
@@ -477,7 +507,11 @@ export function Dashboard({
     ],
     [
       "Ölçülen hedeflere ulaşma",
-      r.target_met_rate == null ? "—" : `%${fmt(r.target_met_rate)}`,
+      r.target_met_rate == null
+        ? "—"
+        : getLocale() === "en"
+          ? `${fmt(r.target_met_rate)}%`
+          : `%${fmt(r.target_met_rate)}`,
       r.target_eligible_n
         ? `${r.target_coverage_rate == null ? "Kapsam bastırıldı" : `%${fmt(r.target_coverage_rate)} ölçüm kapsamı`} · ${r.target_comparison_n}/${r.target_eligible_n} gözlem`
         : "Ölçülebilir L1–L3 hedefi yok",
@@ -495,53 +529,63 @@ export function Dashboard({
   return (
     <div className="analytics-dashboard">
       <div className="metrics-grid analytics-metrics">
-        {tiles.map(([label, value, sub, Icon, color]: Any) => (
-          <section className="metric-card" key={label}>
-            <div className="metric-top">
-              <span>{label}</span>
-              <div className={`metric-icon ${color}`}>
-                <Icon size={18} />
+        {translateNode(
+          tiles.map(([label, value, sub, Icon, color]: Any) => (
+            <section className="metric-card" key={label}>
+              <div className="metric-top">
+                <span>{translateNode(label)}</span>
+                <div className={`metric-icon ${color}`}>
+                  <Icon size={18} />
+                </div>
               </div>
-            </div>
-            <strong>{value}</strong>
-            <small>{sub}</small>
-          </section>
-        ))}
+              <strong>{translateNode(value)}</strong>
+              <small>{translateNode(sub)}</small>
+            </section>
+          )),
+        )}
       </div>
       <div className="analytics-scope-note">
         <Info size={16} />
         <p>
-          <b>Nasıl okunmalı?</b> Ortak puan ve dağılım, seçili çalışanların üç
-          ortak yetkinliğini temel alır. Yetkinlik ve bölüm filtreleri seviye,
-          hedef farkı ve yetkinlik tablosunu daraltır. Farklı rol soru setleri
-          tek bir başarı puanında birleştirilmez. Yetkinlik seçimi, yalnız o
-          formun atandığı çalışanları kapsar. Hedef oranı seviye üretilebilen
-          L1–L3 hedefleriyle sınırlıdır; kapsam oranının paydası yanıtı olan
-          kişi-yetkinlik gözlemleridir.
+          <b>{t("Nas\u0131l okunmal\u0131?")}</b>
+          {t(
+            " Ortak puan ve da\u011F\u0131l\u0131m, se\u00E7ili \u00E7al\u0131\u015Fanlar\u0131n \u00FC\u00E7 ortak yetkinli\u011Fini temel al\u0131r. Yetkinlik ve b\u00F6l\u00FCm filtreleri seviye, hedef fark\u0131 ve yetkinlik tablosunu daralt\u0131r. Farkl\u0131 rol soru setleri tek bir ba\u015Far\u0131 puan\u0131nda birle\u015Ftirilmez. Yetkinlik se\u00E7imi, yaln\u0131z o formun atand\u0131\u011F\u0131 \u00E7al\u0131\u015Fanlar\u0131 kapsar. Hedef oran\u0131 seviye \u00FCretilebilen L1\u2013L3 hedefleriyle s\u0131n\u0131rl\u0131d\u0131r; kapsam oran\u0131n\u0131n paydas\u0131 yan\u0131t\u0131 olan ki\u015Fi-yetkinlik g\u00F6zlemleridir. ",
+          )}
         </p>
       </div>
-      {!r.mock && r.insights?.summary && (
-        <section className="panel analytics-insights">
-          <h2>Değerlendirme özeti</h2>
-          <p>{r.insights.summary}</p>
-          {r.insights.actions?.map((text: string, i: number) => (
-            <button key={i} className="text-btn" onClick={() => onAction(text)}>
-              {text}
-              <ArrowUpRight size={14} />
-            </button>
-          ))}
-        </section>
+      {translateNode(
+        !r.mock && r.insights?.summary && (
+          <section className="panel analytics-insights">
+            <h2>{t("De\u011Ferlendirme \u00F6zeti")}</h2>
+            <p>{r.insights.summary}</p>
+            {translateNode(
+              r.insights.actions?.map((text: string, i: number) => (
+                <button
+                  key={i}
+                  className="text-btn"
+                  onClick={() => onAction(text)}
+                >
+                  {translateNode(text)}
+                  <ArrowUpRight size={14} />
+                </button>
+              )),
+            )}
+          </section>
+        ),
       )}
-      {!r.assigned && (
-        <div className="notice">
-          <Info size={18} />
-          Bu filtrelerle eşleşen katılımcı yok. Filtreleri genişleterek tekrar
-          deneyin.
-        </div>
+      {translateNode(
+        !r.assigned && (
+          <div className="notice">
+            <Info size={18} />
+            {t(
+              " Bu filtrelerle e\u015Fle\u015Fen kat\u0131l\u0131mc\u0131 yok. Filtreleri geni\u015Fleterek tekrar deneyin. ",
+            )}
+          </div>
+        ),
       )}
       <div className="analytics-charts">
         <ChartPanel
-          title="Ekiplerin ortak AI puanı"
+          title={t("Ekiplerin ortak AI puan\u0131")}
           subtitle="Aynı ortak sorular ve rubrikle karşılaştırma"
           note="0–100 · Her ekipte en az 5 geçerli kişi"
           data={teams.map((t: Any) => [
@@ -550,21 +594,24 @@ export function Dashboard({
             `${t.common_n} geçerli kişi`,
           ])}
         >
-          {teams.some((t: Any) => t.common_score != null) ? (
-            <Chart
-              option={common}
-              label="Ekip bazında ortak yazılı yanıt puanı"
-            />
-          ) : (
-            <NoChart />
+          {translateNode(
+            teams.some((t: Any) => t.common_score != null) ? (
+              <Chart
+                option={common}
+                label="Ekip bazında ortak yazılı yanıt puanı"
+              />
+            ) : (
+              <NoChart />
+            ),
           )}
         </ChartPanel>
         <ChartPanel
-          title="Ekip bazında katılım"
+          title={t("Ekip baz\u0131nda kat\u0131l\u0131m")}
           subtitle="Gönderildi, taslak ve başlamayan formlar"
           note={
             <button className="text-btn" onClick={onParticipation}>
-              Ölçüm döneminin anketlerini aç <ArrowUpRight size={13} />
+              {t(" \u00D6l\u00E7\u00FCm d\u00F6neminin anketlerini a\u00E7 ")}
+              <ArrowUpRight size={13} />
             </button>
           }
           data={teams.map((t: Any) => [
@@ -574,17 +621,19 @@ export function Dashboard({
             `${t.not_started} başlamadı`,
           ])}
         >
-          {teams.length ? (
-            <Chart
-              option={participation}
-              label="Ekiplerin anket gönderim ve taslak sayıları"
-            />
-          ) : (
-            <NoChart text="Seçili kapsamda katılımcı bulunamadı." />
+          {translateNode(
+            teams.length ? (
+              <Chart
+                option={participation}
+                label="Ekiplerin anket gönderim ve taslak sayıları"
+              />
+            ) : (
+              <NoChart text="Seçili kapsamda katılımcı bulunamadı." />
+            ),
           )}
         </ChartPanel>
         <ChartPanel
-          title="Ortak puan dağılımı"
+          title={t("Ortak puan da\u011F\u0131l\u0131m\u0131")}
           subtitle="Her çalışan dağılımda bir kez sayılır"
           note={`${r.common_n} geçerli kişi · Aralıklar puan bandını gösterir; yeterlilik seviyesi değildir.`}
           data={(r.score_distribution || []).map((d: Any) => [
@@ -592,17 +641,19 @@ export function Dashboard({
             `${d.count} kişi`,
           ])}
         >
-          {r.score_distribution?.length ? (
-            <Chart
-              option={distribution}
-              label="Kişi bazında ortak yazılı puan dağılımı"
-            />
-          ) : (
-            <NoChart />
+          {translateNode(
+            r.score_distribution?.length ? (
+              <Chart
+                option={distribution}
+                label="Kişi bazında ortak yazılı puan dağılımı"
+              />
+            ) : (
+              <NoChart />
+            ),
           )}
         </ChartPanel>
         <ChartPanel
-          title="Anket seviye önerileri"
+          title={t("Anket seviye \u00F6nerileri")}
           subtitle="Seçilen yetkinliklerde L1–L3 dağılımı"
           note={`${r.level_coverage} kişi-yetkinlik gözlemi · ${r.unmeasured_level_count} gözlemde seviye üretilemedi. L4/L5 bu anketle ölçülmez.`}
           data={
@@ -611,115 +662,140 @@ export function Dashboard({
               : undefined
           }
         >
-          {Object.keys(r.levels || {}).length ? (
-            <Chart
-              option={levels}
-              label="Kişi-yetkinlik bazında anket seviye önerileri"
-            />
-          ) : (
-            <NoChart />
+          {translateNode(
+            Object.keys(r.levels || {}).length ? (
+              <Chart
+                option={levels}
+                label="Kişi-yetkinlik bazında anket seviye önerileri"
+              />
+            ) : (
+              <NoChart />
+            ),
           )}
         </ChartPanel>
       </div>
       <section className="panel analytics-competencies">
         <div className="panel-head">
           <div>
-            <h2>Yetkinlik karşılaştırması</h2>
+            <h2>{t("Yetkinlik kar\u015F\u0131la\u015Ft\u0131rmas\u0131")}</h2>
             <p>
-              Her satır bir ekip, yetkinlik ve karşılaştırılabilir soru
-              grubudur.
+              {t(
+                " Her sat\u0131r bir ekip, yetkinlik ve kar\u015F\u0131la\u015Ft\u0131r\u0131labilir soru grubudur. ",
+              )}
             </p>
           </div>
           <span className="small-pill">
-            {r.aggregates.length} karşılaştırma
+            {translateNode(r.aggregates.length)}
+            {t(" kar\u015F\u0131la\u015Ft\u0131rma ")}
           </span>
         </div>
         <div className="analytics-table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Ekip / soru grubu</th>
-                <th>Yetkinlik</th>
-                <th>Yazılı puan</th>
-                <th>Geçerli kişi</th>
-                <th>Hedef / fark</th>
-                <th>Aksiyon</th>
+                <th>{t("Ekip / soru grubu")}</th>
+                <th>{t("Yetkinlik")}</th>
+                <th>{t("Yaz\u0131l\u0131 puan")}</th>
+                <th>{t("Ge\u00E7erli ki\u015Fi")}</th>
+                <th>{t("Hedef / fark")}</th>
+                <th>{t("Aksiyon")}</th>
               </tr>
             </thead>
             <tbody>
-              {r.aggregates.map((a: Any) => (
-                <tr key={`${a.team_id}:${a.skill_id}:${a.comparison_group}`}>
-                  <td>
-                    <b>{a.team_name}</b>
-                    <small className="analytics-cell-note">
-                      {a.section === "common"
-                        ? "Ortak soru seti"
-                        : a.role_title}
-                    </small>
-                    {a.section === "role" && (
-                      <small className="analytics-group-id">
-                        {groupLabel(a)}
-                      </small>
-                    )}
-                  </td>
-                  <td>
-                    {a.skill_name}
-                    <small className="analytics-cell-note">
-                      {a.section === "common" ? "Ortak" : "Role özel"}
-                    </small>
-                  </td>
-                  <td>
-                    <div className="analytics-score">
-                      <strong>{fmt(a.written_score)}</strong>
-                      <div>
-                        <span style={{ width: `${a.written_score || 0}%` }} />
-                      </div>
-                    </div>
-                    {a.suppressed && (
+              {translateNode(
+                r.aggregates.map((a: Any) => (
+                  <tr key={`${a.team_id}:${a.skill_id}:${a.comparison_group}`}>
+                    <td>
+                      <b>{translateNode(a.team_name)}</b>
                       <small className="analytics-cell-note">
-                        5 kişiden az; gösterilmez
+                        {translateNode(
+                          a.section === "common"
+                            ? "Ortak soru seti"
+                            : a.role_title,
+                        )}
                       </small>
-                    )}
-                  </td>
-                  <td>
-                    {a.n}
-                    <small className="analytics-cell-note">
-                      {a.missing} eksik
-                    </small>
-                  </td>
-                  <td>
-                    {a.target_level ? `L${a.target_level}` : "—"}
-                    <small className="analytics-cell-note">
-                      {a.mean_gap == null
-                        ? "Fark ölçülmedi"
-                        : `${fmt(a.mean_gap, 2)} seviye farkı`}
-                    </small>
-                  </td>
-                  <td>
-                    <button
-                      className="icon-btn"
-                      aria-label={`${a.team_name}, ${a.skill_name} için gelişim planı`}
-                      onClick={() =>
-                        onAction(`${a.skill_name} gelişim planı`, a)
-                      }
-                    >
-                      <ArrowUpRight size={17} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      {translateNode(
+                        a.section === "role" && (
+                          <small className="analytics-group-id">
+                            {translateNode(groupLabel(a))}
+                          </small>
+                        ),
+                      )}
+                    </td>
+                    <td>
+                      {translateNode(a.skill_name)}
+                      <small className="analytics-cell-note">
+                        {translateNode(
+                          a.section === "common" ? "Ortak" : "Role özel",
+                        )}
+                      </small>
+                    </td>
+                    <td>
+                      <div className="analytics-score">
+                        <strong>{translateNode(fmt(a.written_score))}</strong>
+                        <div>
+                          <span style={{ width: `${a.written_score || 0}%` }} />
+                        </div>
+                      </div>
+                      {translateNode(
+                        a.suppressed && (
+                          <small className="analytics-cell-note">
+                            {t(" 5 ki\u015Fiden az; g\u00F6sterilmez ")}
+                          </small>
+                        ),
+                      )}
+                    </td>
+                    <td>
+                      {translateNode(a.n)}
+                      <small className="analytics-cell-note">
+                        {translateNode(a.missing)}
+                        {t(" eksik ")}
+                      </small>
+                    </td>
+                    <td>
+                      {translateNode(
+                        a.target_level ? `L${a.target_level}` : "—",
+                      )}
+                      <small className="analytics-cell-note">
+                        {translateNode(
+                          a.mean_gap == null
+                            ? "Fark ölçülmedi"
+                            : `${fmt(a.mean_gap, 2)} seviye farkı`,
+                        )}
+                      </small>
+                    </td>
+                    <td>
+                      <button
+                        className="icon-btn"
+                        aria-label={t(
+                          `${a.team_name}, ${a.skill_name} için gelişim planı`,
+                        )}
+                        onClick={() =>
+                          onAction(`${a.skill_name} gelişim planı`, a)
+                        }
+                      >
+                        <ArrowUpRight size={17} />
+                      </button>
+                    </td>
+                  </tr>
+                )),
+              )}
             </tbody>
           </table>
         </div>
-        {!r.rows.length && (
-          <div className="analytics-empty">
-            Seçili filtreler için yayımlanmış yetkinlik sonucu bulunamadı.
-          </div>
+        {translateNode(
+          !r.rows.length && (
+            <div className="analytics-empty">
+              {t(
+                " Se\u00E7ili filtreler i\u00E7in yay\u0131mlanm\u0131\u015F yetkinlik sonucu bulunamad\u0131. ",
+              )}
+            </div>
+          ),
         )}
       </section>
       <div className="analytics-charts">
         <ChartPanel
-          title="Öncelikli gelişim alanları"
+          title={t("\u00D6ncelikli geli\u015Fim alanlar\u0131")}
           subtitle="Ölçülebilen hedeflere kalan ortalama seviye farkı"
           note="Yalnız L1–L3 hedefleri · En yüksek farkı olan 6 grup · Bir çalışan sıralaması değildir."
           data={gaps.map((a: Any) => [
@@ -729,34 +805,43 @@ export function Dashboard({
             fmt(a.mean_gap, 2),
           ])}
         >
-          {gaps.length ? (
-            <Chart
-              option={gapsChart}
-              height={Math.max(240, gaps.length * 57)}
-              label="Ekip ve yetkinlik bazında ortalama hedef farkları"
-            />
-          ) : (
-            <NoChart
-              text={
-                r.aggregates.some((a: Any) => a.mean_gap != null)
-                  ? "Ölçülebilen hedeflerde seviye farkı yok."
-                  : "Seçili kapsamda gösterilebilir hedef farkı bulunamadı."
-              }
-              note={`${r.target_comparison_n} / ${r.target_eligible_n} hedef gözleminde seviye ölçülebildi. Ölçülemeyenler için hedefe ulaşıldığı söylenemez.`}
-            />
+          {translateNode(
+            gaps.length ? (
+              <Chart
+                option={gapsChart}
+                height={Math.max(240, gaps.length * 57)}
+                label="Ekip ve yetkinlik bazında ortalama hedef farkları"
+              />
+            ) : (
+              <NoChart
+                text={
+                  r.aggregates.some((a: Any) => a.mean_gap != null)
+                    ? "Ölçülebilen hedeflerde seviye farkı yok."
+                    : "Seçili kapsamda gösterilebilir hedef farkı bulunamadı."
+                }
+                note={`${r.target_comparison_n} / ${r.target_eligible_n} hedef gözleminde seviye ölçülebildi. Ölçülemeyenler için hedefe ulaşıldığı söylenemez.`}
+              />
+            ),
           )}
           <button
             className="analytics-compare-link text-btn"
             onClick={onCompare}
           >
-            Öz beyan ve yazılı yanıtları karşılaştır <ArrowUpRight size={14} />
+            {t(
+              " \u00D6z beyan ve yaz\u0131l\u0131 yan\u0131tlar\u0131 kar\u015F\u0131la\u015Ft\u0131r ",
+            )}
+            <ArrowUpRight size={14} />
           </button>
         </ChartPanel>
         <section className="panel analytics-people">
           <div className="panel-head">
             <div>
-              <h2>Katılımcı profilleri</h2>
-              <p>Yayımlanmış sonucu olan {people.length} kişi</p>
+              <h2>{t("Kat\u0131l\u0131mc\u0131 profilleri")}</h2>
+              <p>
+                {t("Yay\u0131mlanm\u0131\u015F sonucu olan ")}
+                {translateNode(people.length)}
+                {t(" ki\u015Fi")}
+              </p>
             </div>
             <Users size={20} />
           </div>
@@ -764,50 +849,62 @@ export function Dashboard({
             <label className="search">
               <Search size={15} />
               <input
-                aria-label="Katılımcı profili ara"
-                placeholder="Ad, unvan veya ekip ara"
+                aria-label={t("Kat\u0131l\u0131mc\u0131 profili ara")}
+                placeholder={t("Ad, unvan veya ekip ara")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </label>
             <select
-              aria-label="Profil sıralaması"
+              aria-label={t("Profil s\u0131ralamas\u0131")}
               value={sort}
               onChange={(e) => setSort(e.target.value)}
             >
-              <option value="name">Ada göre</option>
-              <option value="team">Ekibe göre</option>
+              <option value="name">{t("Ada g\u00F6re")}</option>
+              <option value="team">{t("Ekibe g\u00F6re")}</option>
             </select>
           </div>
-          {filteredPeople.slice(page * 8, page * 8 + 8).map((person: Any) => (
-            <button
-              className="person-row"
-              key={person.participant_id}
-              onClick={() => onPerson(person)}
-            >
-              <span className="person-avatar">{person.name[0]}</span>
-              <span>
-                <b>{person.name}</b>
-                <small>
-                  {person.title} · {person.team_name}
-                </small>
-              </span>
-              <ChevronRight size={16} />
-            </button>
-          ))}
-          {!filteredPeople.length && (
-            <div className="analytics-empty">
-              Aramanızla eşleşen profil yok.
-            </div>
+          {translateNode(
+            filteredPeople.slice(page * 8, page * 8 + 8).map((person: Any) => (
+              <button
+                className="person-row"
+                key={person.participant_id}
+                onClick={() => onPerson(person)}
+              >
+                <span className="person-avatar">
+                  {translateNode(person.name[0])}
+                </span>
+                <span>
+                  <b>{person.name}</b>
+                  <small>
+                    {person.title}
+                    {t(" \u00B7 ")}
+                    {translateNode(person.team_name)}
+                  </small>
+                </span>
+                <ChevronRight size={16} />
+              </button>
+            )),
+          )}
+          {translateNode(
+            !filteredPeople.length && (
+              <div className="analytics-empty">
+                {t(" Araman\u0131zla e\u015Fle\u015Fen profil yok. ")}
+              </div>
+            ),
           )}
           <div className="analytics-pagination">
             <span>
-              {filteredPeople.length} kişi · {Math.min(page + 1, count)} /{" "}
-              {count}
+              {translateNode(filteredPeople.length)}
+              {t(" ki\u015Fi \u00B7 ")}
+              {translateNode(Math.min(page + 1, count))}
+              {t(" /")}
+              {translateNode(" ")}
+              {translateNode(count)}
             </span>
             <button
               className="icon-btn"
-              aria-label="Önceki profil sayfası"
+              aria-label={t("\u00D6nceki profil sayfas\u0131")}
               disabled={!page}
               onClick={() => setPage((p) => p - 1)}
             >
@@ -815,7 +912,7 @@ export function Dashboard({
             </button>
             <button
               className="icon-btn"
-              aria-label="Sonraki profil sayfası"
+              aria-label={t("Sonraki profil sayfas\u0131")}
               disabled={page + 1 >= count}
               onClick={() => setPage((p) => p + 1)}
             >

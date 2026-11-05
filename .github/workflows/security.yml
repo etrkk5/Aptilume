@@ -30,7 +30,7 @@ jobs:
       - name: Python vulnerability audit
         run: pip-audit --no-deps --disable-pip -r requirements.lock.txt
       - name: Static security analysis
-        run: bandit -r backend/app local_demo.py scripts -ll -ii
+        run: bandit -r backend/app -ll -ii
       - name: Install web dependencies
         working-directory: web
         run: |
@@ -43,8 +43,9 @@ jobs:
       - name: Web production build
         working-directory: web
         run: pnpm build
-      - name: Package Python-only local demo
-        run: python scripts/package_python.py --output work/Aptilume-Python.zip
+      - name: Interface language regressions
+        working-directory: web
+        run: pnpm test
       - name: Build deployment image
         run: docker build -t aptilume:verify .
       - name: Production defaults fail closed

@@ -185,19 +185,19 @@ def test_excel_and_dashboard_share_filters_and_new_aggregates(store, client, sna
         export = s.get(Export, response.json()["id"])
         assert export.filters == filters and export.status == "ready"
         workbook = load_workbook(export.file, data_only=True)
-    summary = dict(workbook["Ozet"].iter_rows(min_row=2, values_only=True))
+    summary = dict(workbook["Summary"].iter_rows(min_row=2, values_only=True))
     assert summary["assigned"] == report["assigned"]
     assert summary["common_median"] == report["common_median"]
-    assert workbook["Kisi_Yetkinlik"].max_row - 1 == len(report["rows"])
-    assert workbook["Ekip_Katilim"].max_row == 2
+    assert workbook["People_Competency"].max_row - 1 == len(report["rows"])
+    assert workbook["Team_Participation"].max_row == 2
     assert (
         sum(
             row[1]
-            for row in workbook["Puan_Dagilimi"].iter_rows(min_row=2, values_only=True)
+            for row in workbook["Score_Distribution"].iter_rows(min_row=2, values_only=True)
         )
         == report["common_n"]
     )
-    assert workbook["Gelistirme_Onerileri"].max_row == 1
+    assert workbook["Development_Actions"].max_row == 1
 
 
 @pytest.mark.parametrize(

@@ -1,185 +1,219 @@
+![Aptilume — Make AI capability measurable](docs/images/aptilume-hero.svg)
+
 # Aptilume
 
-**AI Skills Intelligence · Yapı Kredi**
+**AI Skills Intelligence · Measure capability. Illuminate potential.**
 
-Kurum içi AI yetkinliklerini ekip bağlamı ve rol hedefleriyle ölçen web uygulaması. Açık uçlu ağırlıklı anketler LLM ile hazırlanır. Puanlama, anket kapandıktan sonra ayrı ve kalıcı bir worker işiyle yapılır. Dashboard ve Excel aynı yayımlanmış sonuç sürümünü kullanır.
+Aptilume helps organizations understand their AI capabilities and turn assessment evidence into focused development investment. It brings role-aware surveys, human approval, asynchronous AI evaluation and visual reporting into one workspace.
 
-## Başlangıç
+HR sees organizational development needs. Managers focus on their reporting teams. Employees follow their own assessments and development plans. An independent product identity, local account management and configurable model connections make Aptilume adaptable to different organizations.
 
-**OpenShift'te LDAP olmadan HR + admin ile başlamak için:** [ilk kurulum rehberi](docs/FIRST_INSTALL.md). Tek `aptilume-secrets` içinde iki başlangıç parolası, kalıcı şifreleme anahtarı ve `DATABASE_URL` verilir. PostgreSQL hem hesapları hem anket verilerini tutar; kullanıcı adları `admin` ve `hr` olur. LDAP daha sonra panelden eklenebilir.
+## From AI investment to development priorities
 
-Gereksinimler: Python 3.12+, Node 22+, pnpm 11.25 veya Docker.
+- **Measure in context.** Team objectives, duties, tools, role titles and target competencies inform question generation. Shared questions support comparisons; role questions reflect actual work.
+- **Keep people in control.** HR adds, edits, removes and saves AI-generated questions before approving and publishing a set.
+- **Evaluate evidence.** Open-ended responses are assessed against rubrics and references after the period closes. Written performance, knowledge checks and self-assessment remain distinct indicators.
+- **Make development actionable.** Dashboards, competency maps, target gaps, participation, response-quality reviews and development plans use the same published result version.
+- **Retain accountability.** Versioned policies, catalog snapshots, connection profiles, approvals and audit events make important decisions traceable.
 
-Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.7.0-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
+## Inside Aptilume
+
+### See capability across the organization
+
+Participation, shared written evidence and target coverage come together in a filterable dashboard. Teams get a clear view of development priorities while access scope stays enforced.
+
+![English competency dashboard with participation and target coverage](docs/images/dashboard-en.png)
+
+Compare teams, explore score distributions and inspect evidence coverage.
+
+![Team comparison, participation and competency-level charts](docs/images/analytics-en.png)
+
+### Let AI prepare. Let HR decide.
+
+Review generated questions, refine rubrics and references, and publish only after explicit approval.
+
+![HR question editor with an English draft and publication controls](docs/images/question-editor-en.png)
+
+### Start independently. Add integrations when needed.
+
+Local identities, role boundaries and reporting relationships support organization-specific access without a mandatory directory service.
+
+![Local identity management in Aptilume](docs/images/identity-en.png)
+
+*Screenshots use synthetic demonstration data and mock scores. They illustrate product behavior, not real employee results or measured model quality.*
+
+## Assessment workflow
+
+1. HR defines the competency catalog, teams, role profiles and target levels.
+2. Employee profiles are linked to sign-in accounts and reporting relationships.
+3. Create a period for selected teams or **All teams**. The current EN/TR selection determines its content language.
+4. AI prepares questions. HR reviews, edits, saves, approves and publishes the set.
+5. Employees complete every required question; drafts are saved automatically.
+6. After closure, a separate worker evaluates responses. Off-topic, nonsensical and other review-required answers enter the HR queue.
+7. HR publishes results. Authorized users explore filtered reports, export Excel and track development actions.
+
+```mermaid
+flowchart LR
+    C[Team context & targets] --> G[AI question draft]
+    G --> H[HR review & approval]
+    H --> S[Published survey]
+    S -->|Period closes| E[Batch evaluation]
+    E -->|HR publishes| R[Insights & development]
+    classDef stage fill:#edf5ff,stroke:#3e87c6,color:#163b62
+    classDef human fill:#e4f8f6,stroke:#259b9a,color:#154f55
+    class C,G,S,E stage
+    class H,R human
+```
+
+## Product capabilities
+
+| Area | Capabilities |
+| --- | --- |
+| Competency catalog | A 42-competency starter catalog; create, edit, archive and restore; L1–L5 definitions. |
+| Team and role context | Tasks, tools, constraints, role/title profiles, job bands and target competencies. |
+| Surveys and question editor | Open responses, single-choice questions and self-assessments; editable options, references and rubrics; approval before publication. |
+| Assessment policy | HR edits generation and evaluation instructions in one screen; defaults and immutable policy versions are retained. |
+| Evaluation jobs | Durable background work, retries, failure visibility, evidence validation, human review and publication. |
+| Analytics | Team, role/title, competency, section, job-band and response-status filters; heatmaps, participation and target-gap views. |
+| Reporting | Scope-aware Excel exports, published result versions, comparisons and development plans. |
+| Integrations | Add, edit, test and remove LLM/database profiles; select active profiles for individual tasks. |
+| Identity management | Local accounts, roles, profile links, reporting relationships, password changes, account deactivation and session revocation. |
+| Experience | Original Aptilume vector mark, responsive light/dark themes and persistent EN/TR selection. English is the first-run default. |
+
+**Measurement boundaries:** The catalog supports L1–L5 definitions. The current written-evidence approach supports L1–L3; it does not present L4/L5 as automatically verified proficiency. Written scores, knowledge checks and self-reports are not collapsed into a single ability score. Aggregate scores with fewer than five valid people are suppressed. Technical model failures or missing evidence are not zero ability scores. Real-model quality requires organizational calibration.
+
+**Language:** EN/TR controls interface labels, filters, messages and chart labels. New periods retain the selected language for question generation, evaluation explanations and insights. Existing questions, employee responses, imported catalog content and historical records keep their authored language. Switching the interface language does not rewrite stored content. Excel headings follow the language selected when the export is queued; original responses remain unchanged.
+
+## Identity and access
+
+**Local username/password authentication works independently.** Initial `admin` and `hr` passwords come from a runtime Secret. In **Identity and access**, HR provisions employee/manager accounts and links them to employee profiles and reporting relationships. Local users change their own password from the account menu.
+
+| Role | Scope |
+| --- | --- |
+| HR (`hr`) | All business data, catalog/policy, business account and profile mappings, question approval, reviews and publication. |
+| Manager (`manager`) | Their assigned reporting tree and own profile; unrelated employees and teams are excluded. |
+| Employee (`employee`) | Their own profile, surveys, results and development plans. |
+| Integration administrator (`admin`) | Connections and integration-administrator accounts; no employee assessment data or business-account password control. |
+
+An integration administrator cannot gain business access by resetting an HR/employee password. HR manages business identities. Duplicate active profile links, reporting cycles, self-lockout and removal of the last active local privileged account are blocked. Identity edits revoke affected sessions and use revision checks to prevent lost updates.
+
+The existing **Active Directory connector is optional**. It uses certificate-verified LDAPS/StartTLS, group mapping and the `manager` relationship. Local sign-in does not depend on it. Ready-made OIDC/SAML connectors are not included in this release; identity headers from a reverse proxy are not implicitly trusted.
+
+## Technical architecture
+
+| Layer | Technology and responsibility |
+| --- | --- |
+| Web | React 19, TypeScript, Vite and ECharts; static assets after build. |
+| API | Python 3.12+, FastAPI; sessions, authorization, scope checks and business rules. |
+| Worker | Separate Python process; durable jobs for generation, evaluation and insights. |
+| Persistence | SQLAlchemy/Alembic; PostgreSQL for organization deployments, SQLite for local development. |
+| Control store | Accounts, sessions, connection versions, policies, task bindings and encrypted secrets. |
+| Application store | Teams, profiles, periods, questions, responses, results and export records. |
+| Distribution | Multi-stage Docker image; no Node.js or frontend build tools in the runtime. |
+
+For an empty installation, `DATABASE_URL` initializes both stores in the same PostgreSQL database. Use `CONTROL_STORE_URL` when a separate control database is needed. Application connection profiles are managed in the panel; moving existing data requires the controlled offline migration process.
+
+LLM adapters support OpenAI-compatible Chat Completions and Responses formats. Choose the adapter supported by your gateway. The application validates JSON structure, rubric bounds and quoted evidence. Supply your approved endpoint, model, key and trusted CA/host configuration. The `mock` provider is for development/presentation only; production model tasks require a real provider.
+
+## Quick local installation — Docker
+
+Prerequisites: Git, Docker and Docker Compose.
+
+```bash
+git clone https://github.com/etrkk5/Aptilume.git
+cd Aptilume
+cp .env.example .env
+```
+
+Keep `APP_MODE=development` for local use. Uncomment `BOOTSTRAP_HR_PASSWORD` and set a unique strong password to enable HR sign-in. `admin/admin` is a local-development default only.
+
+```bash
+docker build -t aptilume:0.8.0 .
+docker compose -f compose.dev.yml up -d --no-build
+```
+
+Open **http://127.0.0.1:8080**. Bootstrap prepares the catalog, default instructions, `admin`, and `hr` when configured; it does not load sample employees. Sign in as `hr`, create team/role/employee profiles, then provision their accounts in **Identity and access**.
+
+Stop with `docker compose -f compose.dev.yml down`. Preserve the volume to keep data. For an isolated workspace with sample records, set `APP_MODE=demo` and follow the [presentation guide](docs/DEMO.md).
+
+## Development from source
+
+Requires Python 3.12+, Node.js 22+ and pnpm 11.25. Node.js builds the interface; API and worker run in Python.
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.lock.txt
-cd web
+. .venv/bin/activate
+python -m pip install -r requirements-dev.txt
 corepack enable
-pnpm install --frozen-lockfile
-pnpm build
-cd ..
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web build
 export APP_MODE=development
-PYTHONPATH=backend .venv/bin/python -m app.cli bootstrap
-PYTHONPATH=backend .venv/bin/python -m app.cli api
+export PYTHONPATH=backend
+export BOOTSTRAP_HR_PASSWORD='REPLACE_WITH_A_UNIQUE_STRONG_PASSWORD'
+python -m app.cli bootstrap
+python -m app.cli api
 ```
 
-Ayrı terminalde:
+In another terminal, activate the same environment, set `APP_MODE=development` and `PYTHONPATH=backend`, and run `python -m app.cli worker`. The API uses port `8080` by default. Prebuilt Python ZIP distribution has been removed; install from source or build the container image.
+
+## OpenShift / production installation
+
+**Image build and first installation are separate.** Credentials, database URLs and encryption keys are runtime configuration. See the [first-install guide](docs/FIRST_INSTALL.md) and [unfilled Secret template](deploy/openshift/secret.example.yaml).
+
+1. Build the image and push it to your registry. For both supported architectures, use `docker buildx build --platform linux/amd64,linux/arm64 ...`.
+2. In the application's OpenShift project, create an Opaque Secret named `aptilume-secrets`. Expose its keys as environment variables to bootstrap, API and worker:
+
+| Secret key | Value |
+| --- | --- |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Unique strong 15–128 character password for the initial `admin`. |
+| `BOOTSTRAP_HR_PASSWORD` | Strong initial `hr` password; provide it for local business administration. |
+| `SECRET_ENCRYPTION_KEY` | Unique, persistent Fernet key. |
+| `DATABASE_URL` | `postgresql+psycopg://USER:URL_ENCODED_PASSWORD@HOST:5432/DB?sslmode=verify-full&sslrootcert=/etc/certs/ca.crt` |
+
+3. Set `APP_MODE=production` and `PUBLIC_BASE_URL=https://YOUR_ROUTE_HOST`. Mount the PostgreSQL CA at the URL's certificate path. The database must already exist and the installation role must be able to create tables.
+4. Provide writable `/app/data`, shared by API and worker, and writable `/tmp`. On first installation, run the same image with **`bootstrap`** and wait for success.
+5. Start **`api`** and **`worker`** in separate containers/pods. The image entrypoint is already `python -m app.cli`. The API Service targets **8080**; expose it through an **HTTPS Route**.
+6. Sign in with `admin`/`hr` and the supplied passwords. Configure and test a real LLM profile; HR activates task bindings. Directory integration is optional.
+
+Generate the encryption key once in the project's Python environment:
 
 ```bash
-APP_MODE=development PYTHONPATH=backend .venv/bin/python -m app.cli worker
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Uygulama: http://127.0.0.1:8080. Yerel geliştirme ilk kurulum hesabı **admin / admin**. Bu hesap yalnızca entegrasyonları yönetir. `BOOTSTRAP_HR_PASSWORD` verilirse LDAP olmadan yerel `hr` hesabı da oluşturulur. AD bilgileri girilmeden kurumsal kullanıcı girişi yapılamaz. Temiz kurulum örnek çalışan veya kampanya oluşturmaz; yalnızca 42 kaynak yetkinliğini yükler.
+Preserve the database and key across deployments. Bootstrap values do not reset existing passwords. Changing `DATABASE_URL` does not automatically migrate the active application database.
 
-Docker ile:
+**Runtime:** The image supports non-root execution, arbitrary OpenShift UID/group 0, a read-only root filesystem and dropped capabilities. API and worker run separately. Worker has no HTTP listener, so do not attach API HTTP probes to it. SQLite requires a single API/worker pair and suitable shared storage; replicas/HA require PostgreSQL and target-load verification.
+
+**Network:** A bootstrap `DATABASE_URL` authorizes only its exact database host/port. TLS verification, DNS/IP pinning and metadata/special-address blocks remain active. Explicit `DB_ALLOWED_HOSTS`/`OUTBOUND_ALLOWED_CIDRS` take precedence. Operations must configure host/CIDR and CA settings for additional database, directory and LLM destinations. Restrict `FORWARDED_ALLOW_IPS` to actual trusted proxies; do not use `*`.
+
+| Health endpoint | Purpose |
+| --- | --- |
+| `/health/live` | API process. |
+| `/health/ready`, `/health/startup` | Control store and recovery service. |
+| `/health/application` | Application database/schema. |
+
+Upgrade sequence: **backup → stop API/worker and writes → `migrate` → `bootstrap` → API + worker**. Separate migration/runtime database roles according to organizational policy. Operations owns Deployments, Services, Routes, PVCs, NetworkPolicies and registry publication; the repository does not deploy itself.
+
+## Security and verification
+
+Passwords use Argon2 hashes. Connection secrets use a persistent Fernet key. Production enforces HTTPS, Secure/HttpOnly session cookies, CSRF/origin checks, resource limits, server-side authorization and recent authentication for sensitive writes. Evaluation/policy versions, publication hashes and audit events are retained.
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.7.0 .
-docker compose -f compose.dev.yml up -d --no-build
+python -m pytest
+pnpm --dir web build
+bandit -r backend/app -ll -ii
 ```
 
-Compose API ve worker başlatır, veriyi kalıcı `aptilume_aptilume-data` volume’unda tutar. `compose.dev.yml` yerel geliştirme içindir. `seed` komutu yalnızca izole test/geliştirme ortamına sentetik örnek veriler ekler; üretimde kapalıdır. Önceki sürümden kalan yerel örnek veriler otomatik silinmez.
+GitHub Actions runs tests, dependency audits, web/image builds, container vulnerability scans and isolated PostgreSQL scenarios. See the [verification record](docs/VERIFICATION.md). Real identity/LLM services, MFA/access gateways, organizational PKI/network, load/penetration testing and backup recovery need environment-specific acceptance. Passing tests do not establish a zero-vulnerability guarantee.
 
-## Sunum modu ve dört rol hesabı
+## Documentation
 
-`APP_MODE=demo` izole sunum deposunu, dört şifreli rol hesabını, 30 sentetik çalışanı, yayımlanmış sonuçları ve açık bir anketi hazırlar. Kurulum, hesapları tekrar oluşturmaz veya sunumdaki düzenlemeleri sıfırlamaz. Kullanıcılar `hr`, `employee`, `admin`, `manager`; her birinin parolası ilk bootstrap sırasında rastgele üretilir ve yalnızca işletim komutundan okunur. Parolalar Git’e veya web/API yanıtlarına yazılmaz.
+- [First installation](docs/FIRST_INSTALL.md)
+- [Architecture and development notes](docs/DEVELOPMENT_PLAN.md)
+- [Question editing and publication](docs/FEATURES_0_6.md)
+- [Catalog management](docs/FEATURES_0_5.md)
+- [Policies, quality reviews and reporting](docs/FEATURES_0_4.md)
+- [Security findings and operational responsibilities](docs/SECURITY_REMEDIATION.md)
 
-Yerel `.env` dosyasına `APP_MODE=demo` yazın, güncel image ile Compose’u başlatın. Parolaları görmek için:
-
-```bash
-docker compose -f compose.dev.yml up -d --no-build
-docker compose -f compose.dev.yml exec -T api python -m app.cli demo-accounts
-```
-
-Mod seçimi tek değerdir: `APP_MODE=demo` / `APP_MODE=production`. Değişiklikten sonra API, worker ve bootstrap yeniden başlatılmalıdır. Demo, DATA_DIR altında `presentation-demo/` kullanır; üretim kontrol deposu URL’sini ve şifreleme anahtarını devralmaz. Production demo hesap/deposunu ve mock değerlendirmeyi reddeder. Gerçek üretim için HTTPS, kalıcı Secret, güçlü bootstrap parola ve AD/LLM/DB bağlantıları ayrıca hazır olmalıdır. `compose.dev.yml` yerel sunum/geliştirme içindir; kurumsal deployment yerine geçmez. Ayrıntılı sunum sırası [DEMO.md](docs/DEMO.md) içinde.
-
-## İK talimatları, kalite kontrolü ve raporlama
-
-0.4.0 sürümünde İK, **Ölçüm politikası** ekranında soru üretimi ve yanıt değerlendirme talimatlarını aynı sayfadan düzenleyebilir. Hazırlanmış talimatlar demo/production için varsayılandır; her kayıt yeni sürüm oluşturur. İşler kuyruğa alındıkları politika sürümünü korur. Yeni ölçümde hedef ekipler ve “Tüm ekipler” seçimi vardır.
-
-Tüm anket soruları zorunludur. Kalite analizi yalnız dönem kapandıktan sonraki değerlendirmede yapılır. Anlamsız/ilgisiz/yetersiz veya talimat yönlendirmeli yanıtlar otomatik puan yerine İK'nın **Yanıt kalitesi** kuyruğuna alınır; gerekçeli İK kararı olmadan sonuç yayımlanmaz. Dürüst deneyimsizlik beyanı bir kalite ihlali değildir.
-
-Raporlarda dönem, ekip, unvan/rol, yetkinlik, bölüm, kademe ve yanıt durumu filtreleri; ekip karşılaştırması, katılım, puan/seviye dağılımı ve hedef farkları bulunur. Excel aynı kapsamı kullanır. Teknik ayrıntılar, metrik paydaları ve yükseltme için [0.4.0 rehberi](docs/FEATURES_0_4.md).
-
-## Görünüm
-
-Giriş sayfası ve uygulama başlığındaki güneş/ay düğmesi açık ve koyu tema arasında geçer. İlk seçim sistem tercihinden alınır; manuel tercih bu tarayıcıda kalıcıdır. Tema tercihi kimlik, oturum veya rol bilgisi saklamaz.
-
-## Güvenlik durumu
-
-0.3.0 güvenlik incelemesi ve sertleştirme sürümüdür. Başlangıç bulguları [inceleme raporunda](docs/SECURITY_REVIEW.md), uygulanan düzeltmeler ve güncel üretim kabul koşulları [sonuç kaydında](docs/SECURITY_REMEDIATION.md) tutulur. Gerçek kurum AD/LLM/OpenShift kabulü bu kod incelemesinin yerini tutmaz.
-
-## Kimlik ve erişim
-
-Active Directory entegrasyonu LDAPS veya StartTLS kullanır. Sertifika ve sunucu adı doğrulaması zorunludur. Parolalar URL veya loglara yazılmaz; servis hesabının parolası şifrelenir, çalışan parolası saklanmaz. Kimlik eşlemesi değişmez `objectGUID` üzerinden yapılır. Aynı adlı kişileri isim veya title üzerinden birleştirme yapılmaz.
-
-| Rol | Kapsam |
-|---|---|
-| Çalışan | Yalnızca kendi profili, atamaları, yanıtları, sonuçları ve kendisine atanmış gelişim planları |
-| Ekip yöneticisi | Kendi profili ve AD `manager` ilişkisiyle kendisine bağlı çalışanlar; kendi kapsamı için dönem ve gelişim planı yönetimi |
-| Entegrasyon yöneticisi | AD, LLM, DB bağlantıları ve çalışma alanı ayarları; çalışan ve anket verilerine erişmez |
-| İnsan kaynakları | Tüm iş verileri ve entegrasyonlar |
-
-AD grup eşlemesi önceliği: İK → entegrasyon yöneticisi → ekip yöneticisi → çalışan. Entegrasyon admini olmak, kendisine bağlı çalışan bulunsa bile iş verisi yetkisi vermez. `manager` alanında raporlanan aktif çalışanı bulunan kullanıcı yönetici olur; ayrıca bir yönetici grubu tanımlanabilir. Alt yönetici ekiplerinin dahil edilmesi admin panelinde seçilir.
-
-Yetki, her API isteğinde sunucuda hesaplanır. Aynı departmanın iki yöneticisi birbirinin çalışanlarını göremez. Ortak departman bağlamı/rol hedefleri yalnızca departmanın tamamına yetkili yönetici veya İK tarafından değiştirilebilir. Kapsamı birden fazla yöneticiyi içeren dönemi yalnızca tüm katılımcılara yetkili kullanıcı kapatabilir, değerlendirebilir ve yayımlayabilir. Çalışanın yerine yönetici veya İK anket yanıtı gönderemez.
-
-Oturumlar sunucuda tutulan, rastgele ve yalnızca hash’i saklanan cookie’lerle çalışır. Cookie HttpOnly/SameSite’dır; üretimde Secure kullanır. Yazma işlemleri CSRF ve Origin kontrolü gerektirir. Süre sınırı 8 saat, hareketsizlik sınırı 30 dakikadır; arka plan yenilemeleri hareketsiz oturumu açık tutmaz. Başarısız girişler sınırlanır. Kullanıcı devre dışı bırakıldığında, rol veya yönetici ilişkisi değiştiğinde kapsam yeniden uygulanır. AD verisi en fazla 5 dakika önbelleğe alınır; süresi dolduğunda dizine erişilemiyorsa yetki genişletilmez ve istek reddedilir. AD ayarları uygulandığında kurumsal oturumlar iptal edilir. Üretimde çerez `__Host-` öneki kullanır. Hesap ve IP kotaları ortak kontrol deposunda atomik tutulur; farklı IP, paralel istek veya farklı pod ile hesap kotası aşılmaz. En fazla 5 oturum tutulur. Hassas AD/LLM etkinleştirmelerinde son 15 dakikada giriş yapılmış olması gerekir.
-
-## Admin panelinde AD kurulumu
-
-1. Yerel adminle giriş yapın ve **Bağlantı ayarları → Active Directory → Bağlantıyı düzenle** ekranını açın.
-2. Host, port, LDAPS/StartTLS, Base DN, salt okuma yetkili servis hesabının DN/parolası ve gerekiyorsa pod’a bağlanmış kurumsal CA dosyası yolunu girin.
-3. İK ve entegrasyon admini gruplarının tam DN’lerini ayrı satırlarda tanımlayın. İç içe gruplar desteklenir. Yönetici alanı varsayılan olarak `manager`, kalıcı kimlik `objectGUID`, kullanıcı adı `sAMAccountName`, ekip `department` alanıdır.
-4. Ayarları kaydedin, **Test et** ile TLS/servis hesabı/Base DN kontrolünü çalıştırın. AD girişini etkinleştirin ve **Eşitle** ile kişileri/ekipleri alın.
-5. İK hesabıyla ekip bağlamını, title bazlı rol profillerini ve katılımcı–rol eşlemelerini tamamlayın. İK kademesi/rolü yalnızca AD title metninden otomatik tahmin edilmez.
-
-İlk kurumsal kullanıcı eşitlemesi tamamlandıktan sonra entegrasyon admininin AD değişikliği öneri olarak saklanır. Aktif politika değişmez; ayrı bir İK kullanıcısı öneriyi inceleyip uygular veya reddeder. Kurulum kilidi kullanıcılar devre dışı bırakıldığında yeniden açılmaz. İlk kurulum hesabı, gerçek AD güven ilişkisi kurulana kadar IAM bootstrap yetkisine sahiptir; bu aşama yalnızca kontrollü işletim ağı üzerinden yapılmalıdır.
-
-Sunucu veya servis hesabı değişirse parola yeniden girilmelidir. Kayıtlı sırlar geri okunmaz; boş parola korunur. Yerel admin ve HR hesaplarının güçlü parola belirleme ve çıkış işlemleri hesap menüsündedir. Yerel hesabın kapatılması gerekiyorsa önce kurumsal yönetici ve kurtarma süreci işletim ekibince doğrulanmalıdır.
-
-## İş akışı
-
-1. Yönetici ekip amacı, görevler, kullanım sınırları, yetkinlik hedefleri ve önem derecelerini düzenler. Değişiklikler yeni dönemlere uygulanır.
-2. Yetkili kullanıcı dönem oluşturur, soruları hazırlatır, soru/rubrik setini inceler, onaylar ve anketi açar.
-3. Çalışan kendisine atanmış formu doldurur. Başlangıç formu 22 soru içerir: 12 açık uçlu, 4 tek seçim ve 6 öz beyan. Taslaklar otomatik kaydedilir.
-4. Gönderim puanlamayı başlatmaz. Dönem kapandıktan sonra **Toplu değerlendir** ayrı worker işi başlatır.
-5. İlerleme, sınırlı tekrarlar ve gerekli insan incelemeleri takip edilir. Tamamlanan sonuçlar değişmez bir sürüm olarak yayımlanır.
-6. Dashboard’da kapsam içindeki katılım, puan, hedef, seviye ve kişi profilleri incelenir. **Gelişim odakları** kalıcı gelişim planı açar veya öz beyan/yazılı değerlendirme karşılaştırmasını gösterir.
-7. Excel özet veya açık yanıtları içeren ayrıntılı çıktı olarak hazırlanır. Oluşturulurken ve indirilirken kullanıcı kapsamı yeniden denetlenir; yetki değişiminden sonra eski kapsamlı dosya indirilemez.
-
-Sentetik puanların kaynağı **Rapor bilgileri** ve Excel metodolojisinde belirtilir. Ana ekranda demo etiketi veya sentetik veri dipnotu gösterilmez. Mock sonuçlar gerçek model kalitesi veya çalışan yeterliliği kanıtı değildir.
-
-## LLM ve DB bağlantıları
-
-Bağlantılar admin panelinden eklenir, düzenlenir, test edilir ve bağımlılıkları uygunsa silinir. Çalışan verisini bir LLM profiline yönlendirecek görev seçimlerini yalnızca İK etkinleştirir. Hedef/hesap değişince eski anahtar yeni sunucuya taşınmaz; yeni secret girilmelidir. Bağlantı profiline serbest header, parola veya ek bağlantı parametresi gömülemez. Düzenleme yeni sürüm oluşturur; eski işler kullandıkları sürümü korur. Boş secret korunur, temizlemek için ayrı seçenek gerekir.
-
-LLM protokolleri: `mock`, `openai_responses`, `openai_compatible_chat`. Base URL sürüm kökünü içermelidir (`https://llm.example/v1`); adapter `/responses` veya `/chat/completions` ekler. Gerçek endpoint host’u `OUTBOUND_ALLOWED_HOSTS` listesinde bulunmalıdır. Özel port için `host:port` yazın. Kurum içi IP ağları ayrıca `OUTBOUND_ALLOWED_CIDRS` ile izinli olmalıdır; loopback, metadata, link-local ve IPv4-mapped eşdeğerleri engellenir. Doğrulanan IP bağlantıda sabitlenir, TLS SNI/host kontrolü korunur. `HTTP_PROXY`/`HTTPS_PROXY` örtük olarak kullanılmaz. Kurumsal LLM CA yolu `LLM_CA_FILE` ile verilir. Başarılı bağlantı testi modelin ölçüm kalitesini doğrulamaz. Üretimde mock profil ile soru/puanlama işi başlatılması engellenir.
-
-SQLite ve PostgreSQL desteklenir. DB bağlantı testi tablo oluşturmaz. Aktifleştirme öncesi taşıma önizlemesi vardır; açık dönemler ve işler tamamlanmalı, yazmalar durdurulmalı, yedek alınmalı ve hedef boş olmalıdır. Transaction ile kopyalama ve içerik karşılaştırması tamamlanınca bağlantı değiştirilir. Üretimde web üzerinden DB taşıması engellenir. İşletim ekibi API ve worker’ı durdurup yedek aldıktan sonra aşağıdaki komutu çalıştırır; `--services-stopped` gerçek servis durdurma/yedek kontrolünün yerine geçmez:
-
-```bash
-PYTHONPATH=backend python -m app.cli storage-migrate --profile-id PROFIL_ID --services-stopped
-```
-
-Bu komut yalnızca işletim erişimi olan operatör içindir. Yeni bağlantıya geçildikten sonra API/worker yeniden başlatılır. Kontrol deposu otomatik taşınmaz; onun adresi başlangıç Secret/env ayarıdır.
-
-Kontrol deposu kimlikleri, oturumları, bağlantı sürümlerini, görev seçimlerini ve şifreli sırları tutar. Uygulama deposu anketleri, sonuçları, kapsamlı export kayıtlarını ve gelişim planlarını tutar. Kontrol deposunun başlangıç URL’si `CONTROL_STORE_URL` ile verilir. Boş kurulumda `DATABASE_URL` her iki deponun aynı PostgreSQL üzerinde başlamasını sağlar; varsa `CONTROL_STORE_URL` kontrol deposu için önce gelir. Uygulama DB’si erişilemezse yerel admin bağlantı kurtarma ekranı açık kalır.
-
-## OpenShift / üretim ayarları
-
-Image güncel Alpine Python tabanına ve değişmez digestlere sabitlenmiştir. Runtime pytest/derleme aracı içermez; uygulama kaynakları grup tarafından yazılamaz. Image non-root `1001:0`, port 8080 ile çalışır; keyfi UID/grup 0, read-only kök dosya sistemi ve capability kapatma desteklenir. Yazılabilir alanlar `/app/data` ve `/tmp` ile sınırlıdır. Aynı image `bootstrap`, `migrate`, `api` ve `worker` komutlarıyla kullanılır. `bootstrap` katalog ve ilk kurulum hesabını hazırlar; gerçek kuruma sentetik veri yüklemez.
-
-İşletim ekibinin deployment için vereceği ayarlar:
-
-- Varsayılan `APP_MODE=production`; geçersiz değer başlangıcı durdurur. Yerelde geliştirme açıkça `APP_MODE=development` olmalıdır. `APP_MODE=production`: Secure cookie/HSTS; API dokümantasyonu, zayıf ilk parola, seed ve mock iş çalıştırma kapalı.
-- Kalıcı ve tüm süreçlerde aynı `SECRET_ENCRYPTION_KEY` (Fernet): cluster Secret’tan verilmelidir. Mevcut şifreli veride anahtar kendiliğinden değiştirilmez.
-- LDAP olmadan HR girişi için `BOOTSTRAP_HR_PASSWORD` eklenebilir; kullanıcı adı `hr`, rolü İK olur. Yerel hesapların parolaları Secret değişince sıfırlanmaz.
-- İlk boş kurulumda benzersiz `BOOTSTRAP_ADMIN_PASSWORD` (en az 15 karakter, en fazla 128 karakter). Yerel `admin/admin` ile kurulmuş veride önce hesap menüsünden parola değiştirilmelidir; üretim başlangıcı geçici parolayı reddeder.
-- `DB_ALLOWED_HOSTS`, `DIRECTORY_ALLOWED_HOSTS`: üretim DB/AD hedeflerinin tam host adları; özel port için `host:port`. Kurum içi CIDR’leri `OUTBOUND_ALLOWED_CIDRS` ile açıkça belirtin. İlk kurulumda bu DB ağ ayarları verilmemişse operator Secret'ındaki `DATABASE_URL` yalnız kendi DB host/portuna izin verir; başka panel bağlantılarını yetkilendirmez. Açık ağ politikası her zaman önceliklidir. PostgreSQL `verify-full` zorunludur; `sslrootcert` admin profilinde veya kontrol deposu URL’sinde kurumsal CA yoludur.
-- `FORWARDED_ALLOW_IPS`: yalnızca güvenilen Route/proxy IP’leri veya ağları. Varsayılan boş; istemci IP’si için rastgele forwarded header’a güvenilmez. `*` kullanmayın.
-- `PUBLIC_BASE_URL=https://...`: kullanıcıya açılacak Route adresi. TLS sonlandırma/sertifika, CA mount, LLM izinli host’ları, AD/DB ağ erişimi, kalıcı veri ve yedekler işletim ekibince sağlanır.
-- API ve worker ayrı süreç/pod olarak çalışmalıdır. SQLite ile tek API, tek worker ve uygun paylaşılan yerel disk kullanılmalıdır. Çok replica/HA hedefleniyorsa kontrol ve uygulama depoları uygun kurumsal PostgreSQL’e taşınmalı ve eşzamanlılık/yük testi yapılmalıdır.
-
-Dağıtım sırası: yedek → uygulama yazmalarını/worker’ı durdur → `migrate` → `bootstrap` → API → worker. Mevcut tabloları genişleten migration `0002` kapsamlı export ve gelişim planlarını ekler. Kontrol deposunun yeni tabloları idempotent oluşturulur. OpenShift Deployment/Service/Route/PVC/Secret ve registry push kullanıcı ekibine aittir.
-
-| Sağlık ucu | Anlamı |
-|---|---|
-| `/health/live` | API süreci |
-| `/health/ready`, `/health/startup` | Kontrol deposu ve admin kurtarma hizmeti |
-| `/health/application` | Uygulama DB’si/şema; erişim hatasında 503 |
-
-Worker HTTP sunmaz; API’ye özgü image healthcheck’i worker’da devre dışı bırakılmalıdır. İş lease/heartbeat ve süreç durumu izlenir. Readiness, LLM veya AD kullanılabilirliği garantisi değildir.
-
-## Güvenlik ve yaşam döngüsü sınırları
-
-JSON gövdesi auth uçlarında 8 KiB, diğer API uçlarında 64 KiB ile sınırlıdır; sıkıştırılmış, mükerrer alanlı, aşırı derin veya sonlu olmayan sayı içeren JSON reddedilir. LLM girdi sınırı 256 KiB, yanıt sınırı 1 MiB; model çıktısı görev bazında token ve şema sınırına tabidir. Export 5/10 dakika/kullanıcı; toplam export başlatma 100/10 dakika ile sınırlıdır. İstek ve model sınırlarını aşan işlem teknik hata olarak gösterilir; sıfır yetkinlik puanı üretilmez.
-
-Excel dosyaları varsayılan 7 gün sonra worker tarafından temizlenir (`EXPORT_RETENTION_DAYS`, 1–90). Dosya üst sınırı 50 MiB ve çıktı alanı bütçesi 1 GiB; indirmede dizin ve hash doğrulanır. Güvenlik olayları varsayılan 90 gün saklanır (`AUDIT_RETENTION_DAYS`, 7–365). Ham parolalar, cookie, API anahtarı ve yanıt metinleri güvenlik loguna yazılmaz. Anonim ret olayları log taşmasını sınırlamak için örneklenir; baskılanan sayı özetlenir. İK paneli son olayları gösterir; stdout olayları SIEM’e alınmalıdır.
-
-Uygulama TOTP/MFA sağlamaz. Ayrıcalıklı erişim, kurumun MFA/koşullu erişim sağlayan güvenli erişim katmanı arkasına alınmalıdır. WAF/ingress kotaları, Secret/PVC şifreleme ve yedek, TLS/CA, LLM gateway bütçesi ve gerçek yük/sızma testi kurum kabulünün parçasıdır.
-
-## Doğrulama ve ölçüm sınırları
-
-```bash
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest
-cd web
-pnpm build
-```
-
-Testler gerçek kurum endpointlerine bağlanmaz. Ayrıntılar: [doğrulama kaydı](docs/VERIFICATION.md), [geliştirme planı](docs/DEVELOPMENT_PLAN.md). `tests/serve_ui_fixture.py` yalnızca izole yerel arayüz kontrolü içindir; Docker runtime’a kopyalanmaz ve gerçek kimlik doğrulamasına test girişi eklemez.
-
-Kaynak katalog 42 yetkinlik, 210 seviye tanımı ve 126 eşleştirme içerir. Dokuz kaynak numara çelişkisi isim/alias eşleştirmesiyle çözülmüştür; 18 eksik kanıt kaynağı açık veri sorunu olarak korunur. Logo resmî Yapı Kredi varlığıdır; kaynak/hash `data/brand-source.json` içindedir.
-
-Yazılı puan, MCQ ve öz beyan ayrı göstergelerdir. Teknik hata sıfır puan sayılmaz. Seviye önerisi davranış göstergelerinden hesaplanır; 0–100 skor beşe bölünmez. L4/L5 başlangıç formuyla doğrulanmaz; doğrulanmış seviye boş kalır. Toplu grupta beşten az geçerli kayıt varsa puan bastırılır. Gerçek AD/LLM, kurumun ölçüm kalibrasyonu, OpenShift koşulları ve hedef yük kurum ortamında ayrıca doğrulanmalıdır.
-
-İK **Yetkinlik kataloğu** ekranından yetkinlik ekleyebilir, tanımı/sorumluları/L1–L5 seviyelerini düzenleyebilir, silebilir ve arşivden geri yükleyebilir. Geçmiş ölçümler kendi katalog sürümünü korur. [0.5.0 katalog rehberi](docs/FEATURES_0_5.md).
-
-0.6.0: AI soru üretimi sonrasında İK **Soruları düzenle ve yayınla** ekranından soru ekleyebilir, kopyalayabilir, düzeltebilir, silebilir ve taslak kaydedebilir. Onay/yayın yalnız İK'ya açıktır; yayın öncesi kapsam kontrol edilir, yayın sonrası içerik sabitlenir. Soru sayısı ve rapor paydaları atanmış sete göre değişir. [İK soru editörü rehberi](docs/FEATURES_0_6.md).
-
-0.6.1: dar ekranlarda soru editörü ve rapor/anket filtrelerinin genişliği düzeltildi. Uzun başlık, yetkinlik, soru ve referans metinleri satıra bölünür; çalışan formu ekranı genişletmez. [Yerleşim kontrolü](docs/LAYOUT_0_6_1.md).
-
-0.7.0: LDAP beklemeden Secret ile yerel HR + admin kurulumu ve aynı PostgreSQL üzerinde kontrol/uygulama deposu başlangıcı. [İlk kurulum](docs/FIRST_INSTALL.md).
+The original Aptilume mark is an editable SVG created for this project. Asset provenance and checksum: [brand-source.json](data/brand-source.json).

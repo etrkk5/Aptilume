@@ -380,7 +380,7 @@ def test_report_export_and_jobs_scope_rechecked_after_hierarchy_change(store, sc
         with store.session() as s:
             export = s.get(Export, eid)
             wb = load_workbook(export.file)
-            ws = wb["Kisi_Yetkinlik"]
+            ws = wb["People_Competency"]
             assert {row[0] for row in list(ws.values)[1:]} == {P(1), P(3), P(5), P(6)}
         with store.cs() as s:
             s.get(DirectoryUser, "e1").manager_dn = "cn=m2"

@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete, update, func
 from .models import DirectoryUser, AuthSession, LoginAttempt, Setting, ControlEvent
 from .store import DomainError
 from .directory import DirectoryClient, directory_config, synchronize
@@ -19,7 +19,7 @@ actor_context = ContextVar("actor", default=None)
 _sync_lock = threading.Lock()
 _login_slots = threading.BoundedSemaphore(4)
 passwords = PasswordHasher()
-LOCAL_ACCOUNTS = {"admin": "local-admin", "hr": "local-hr"}
+_unknown_password_hash = passwords.hash(secrets.token_urlsafe(32))
 
 
 @contextmanager
@@ -61,6 +61,7 @@ class Actor:
     csrf_token: str = ""
     temporary_password: bool = False
     authenticated_at: float = 0
+    can_change_password: bool = False
 
     @property
     def hr(self):
@@ -91,7 +92,7 @@ class Actor:
             "participant_id": self.participant_id,
             "csrf_token": self.csrf_token,
             "temporary_password": self.temporary_password,
-            "can_change_password": self.id in LOCAL_ACCOUNTS.values(),
+            "can_change_password": self.can_change_password,
             "scope_revision": hashlib.sha256(
                 repr(
                     (
@@ -159,6 +160,7 @@ def actor_for_user(store, user_id, csrf="", authenticated_at=0):
             csrf,
             user.temporary_password,
             authenticated_at,
+            user.source == "local" and bool(user.password_hash),
         )
 
 
@@ -188,7 +190,7 @@ class AuthService:
                     DirectoryUser(
                         id="local-admin",
                         username="admin",
-                        display_name="Entegrasyon yöneticisi",
+                        display_name="Integration administrator",
                         roles=["admin"],
                         groups=[],
                         source="local",
@@ -220,7 +222,7 @@ class AuthService:
                     DirectoryUser(
                         id="local-hr",
                         username="hr",
-                        display_name="İnsan kaynakları",
+                        display_name="Human resources",
                         roles=["hr"],
                         groups=[],
                         source="local",
@@ -228,6 +230,8 @@ class AuthService:
                         temporary_password=False,
                     )
                 )
+            if not s.get(Setting, "identity_revision"):
+                s.add(Setting(key="identity_revision", value={"version": 1}))
 
     def login(self, username, password, client_ip):
         from .throttle import reserve, refund
@@ -249,10 +253,12 @@ class AuthService:
                 429,
             )
         try:
-            local_id = LOCAL_ACCOUNTS.get(username.casefold())
             with self.store.cs() as session:
-                local_identity = (
-                    session.get(DirectoryUser, local_id) if local_id else None
+                local_identity = session.scalar(
+                    select(DirectoryUser).where(
+                        DirectoryUser.source == "local",
+                        func.lower(DirectoryUser.username) == username.casefold(),
+                    )
                 )
             if self.store.settings.presentation_demo:
                 from .demo import authenticate_demo
@@ -261,11 +267,10 @@ class AuthService:
             elif local_identity is not None:
                 identity = local_identity
                 try:
-                    verified = (
-                        identity.source == "local"
-                        and identity.active
-                        and passwords.verify(identity.password_hash, password)
+                    password_ok = passwords.verify(
+                        identity.password_hash or _unknown_password_hash, password
                     )
+                    verified = identity.active and password_ok
                 except VerificationError:
                     verified = False
                 if not verified:
@@ -276,10 +281,14 @@ class AuthService:
             else:
                 cfg = directory_config(self.store, secret=True)
                 if not cfg["enabled"]:
+                    try:
+                        passwords.verify(_unknown_password_hash, password)
+                    except VerificationError:
+                        pass
                     raise DomainError(
-                        "directory_not_configured",
-                        "Active Directory henüz yapılandırılmamış. Entegrasyon yöneticisine başvurun.",
-                        503,
+                        "invalid_credentials",
+                        "Kullanıcı adı veya parola hatalı.",
+                        401,
                     )
                 verified = self.client_factory(cfg).authenticate(username, password)
                 # Login performs a fresh user bind, while the full reporting tree uses its bounded TTL.
@@ -405,10 +414,10 @@ class AuthService:
                 )
 
     def change_password(self, actor, current, new):
-        if actor.id not in LOCAL_ACCOUNTS.values():
+        if not actor.can_change_password:
             raise DomainError(
                 "directory_password",
-                "Kurumsal parolanız Active Directory üzerinden yönetilir.",
+                "Bu hesabın parolası bağlı kimlik sağlayıcısı üzerinden yönetilir.",
                 403,
             )
         from .throttle import reserve, refund
@@ -421,7 +430,7 @@ class AuthService:
             )
         with password_capacity():
             with self.store.cs() as s:
-                user = s.get(DirectoryUser, actor.id)
+                user = s.get(DirectoryUser, actor.id, with_for_update=True)
                 if not user or not user.active or user.source != "local":
                     raise DomainError("session_invalid", "Oturum geçerli değil.", 401)
                 try:
@@ -466,6 +475,7 @@ def install_auth(app, store, auth):
     from fastapi.responses import JSONResponse
     from starlette.concurrency import run_in_threadpool
     from pydantic import BaseModel, Field
+    from .language import error_message, request_language
 
     class LoginInput(BaseModel):
         username: str = Field(min_length=1, max_length=254)
@@ -505,6 +515,10 @@ def install_auth(app, store, auth):
                     critical = (
                         (path == "/api/v1/admin/directory" and request.method == "PUT")
                         or path.startswith("/api/v1/admin/service-bindings/")
+                        or (
+                            path.startswith("/api/v1/admin/users")
+                            and request.method not in ["GET", "HEAD", "OPTIONS"]
+                        )
                         or (
                             path.startswith("/api/v1/admin/directory/changes/")
                             and path.endswith("/approve")
@@ -620,12 +634,18 @@ def install_auth(app, store, auth):
             )
             response = JSONResponse(
                 status_code=exc.status,
-                content={"code": exc.code, "message": exc.message},
+                content={
+                    "code": exc.code,
+                    "message": error_message(
+                        exc.code, exc.message, request_language(request)
+                    ),
+                },
             )
         finally:
             if reset is not None:
                 actor_context.reset(reset)
         response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Language"] = request_language(request)
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (

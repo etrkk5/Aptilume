@@ -71,7 +71,24 @@ def add_sheet(wb, name, columns, rows):
     return ws
 
 
-def build_export(store, eid):
+def localize_workbook(workbook):
+    from .config import REFERENCE_DIR
+
+    labels = json.loads((REFERENCE_DIR / "export-labels.en.json").read_text())
+    for sheet in workbook:
+        original_name = sheet.title
+        sheet.title = labels.get(original_name, original_name)
+        for cell in sheet[1]:
+            if isinstance(cell.value, str):
+                cell.value = labels.get(cell.value, cell.value)
+        if original_name == "Metodoloji":
+            for row in sheet.iter_rows(min_row=2):
+                for cell in row:
+                    if isinstance(cell.value, str):
+                        cell.value = labels.get(cell.value, cell.value)
+
+
+def build_export(store, eid, language="tr"):
     with store.session() as s:
         export = get(s, Export, eid)
         pub = get(s, Publication, export.publication_id)
@@ -279,6 +296,8 @@ def build_export(store, eid):
         )
     temp = out / f"{eid}.tmp.xlsx"
     final = out / f"{eid}.xlsx"
+    if language == "en":
+        localize_workbook(wb)
     wb.save(temp)
     if temp.stat().st_size > MAX_EXPORT_SIZE:
         temp.unlink()

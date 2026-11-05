@@ -1,37 +1,38 @@
-# İlk kurulum: yerel HR + admin ve PostgreSQL
+# First installation: local HR/admin and PostgreSQL
 
-LDAP hazır olmadan gerçek, boş bir kurumsal kurulum açılabilir. Kullanıcı adları `admin` ve `hr`; parolaları kurulumda Secret'tan verilir. Sentetik kişi/yanıt/puan oluşturulmaz. Admin yalnız entegrasyonları, HR tüm iş alanlarını görür. İki hesap da hesap menüsünden kendi parolasını değiştirebilir.
+A clean organization workspace works without an external identity provider. Bootstrap creates `admin` and, when configured, `hr` using runtime Secret values. No sample employees or responses are loaded. Local users change their own password from the account menu.
 
-## Tek Secret
+## One runtime Secret
 
-Ad: **`aptilume-secrets`**, tür: **Opaque**. [Doldurulmamış şablon](../deploy/openshift/secret.example.yaml).
+Name: **`aptilume-secrets`**. Type: **Opaque**. Use the [unfilled template](../deploy/openshift/secret.example.yaml).
 
 | Key | Value |
 | --- | --- |
-| `BOOTSTRAP_ADMIN_PASSWORD` | `admin` hesabının ilk parolası. |
-| `BOOTSTRAP_HR_PASSWORD` | `hr` hesabının ilk parolası. |
-| `SECRET_ENCRYPTION_KEY` | Kuruluma özel, kalıcı Fernet anahtarı. |
-| `DATABASE_URL` | PostgreSQL kullanıcı, parola, host ve DB içeren bağlantı adresi. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Initial `admin` password. |
+| `BOOTSTRAP_HR_PASSWORD` | Initial `hr` password. |
+| `SECRET_ENCRYPTION_KEY` | Unique persistent Fernet key. |
+| `DATABASE_URL` | PostgreSQL URL containing username, URL-encoded password, host and database. |
 
-Parolalar 15–128 karakter olmalı; yaygın/tekrarlı olmamalı, `admin` içermemeli. Aynı parolayı iki hesapta kullanmayın. `BOOTSTRAP_HR_PASSWORD` verilmezse geriye uyumlu olarak yalnız admin oluşturulur. Boş/geçersiz HR parolası verilirse yeni hesapların oluşturulması durur. Parolalar image'a girmez; DB'de Argon2 hash olarak saklanır. Rastgele parola üretip pod'dan geri okumak gerekmez.
+Passwords must be strong, 15–128 characters, without common/repeated patterns or the word `admin`. Use different passwords. Omitting the HR value preserves admin-only bootstrap; an explicitly empty/invalid HR value blocks new-account initialization. Passwords are hashed with Argon2 and are not embedded in the image. Operators choose the initial passwords, so pod access is not needed to discover them.
 
-Fernet anahtarı projenin Python ortamında bir kez üretilebilir:
+Generate the encryption key once in the project's Python environment:
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-`DATABASE_URL` ilk kurulumda hem kontrol tablolarını (hesap/oturum/bağlantı) hem uygulama tablolarını (anket/sonuç) aynı PostgreSQL veritabanına yerleştirir. Veritabanı önceden açılmış olmalı; ilk kurulum kullanıcısı tablo oluşturabilmeli. Bu ayar varken ilk uygulama bağlantısı SQLite oluşturmaz. Ayrı kontrol DB'si istenirse `CONTROL_STORE_URL` önce gelir. PostgreSQL parolasındaki `@`, `:`, `/`, `?`, `#`, `%` gibi karakterler URL-encode edilmelidir.
+`DATABASE_URL` initializes control and application tables in the same PostgreSQL database on an empty installation. The database must exist and the installation role must have schema permissions. It does not create a local application SQLite store in this configuration. `CONTROL_STORE_URL` takes precedence for the control store if a separate database is needed. Percent-encode reserved characters in URL credentials.
 
-## Deployment ekibine verilecek kısa akış
+## Operations checklist
 
-1. `aptilume:0.7.0` image'ını build edip kurum registry'sine yükleyin. Secret build sırasında verilmez.
-2. `aptilume-secrets` içindeki key'leri **bootstrap, API ve worker** container'larına environment olarak bağlayın. Secret ve pod'lar aynı OpenShift projesinde olmalı.
-3. Aşağıdaki normal ortam ayarlarını verin. PostgreSQL CA dosyasını URL'deki yola mount edin. Veri/Excel alanı `/app/data` yazılabilir ve API/worker arasında paylaşılabilir olmalı.
-4. İlk açılışta aynı image ile `bootstrap` komutunu bir kez çalıştırıp başarıyla bitmesini bekleyin. Bu işlem tabloları, 42 kaynak yetkinliğini ve iki hesabı hazırlar. Ardından ana container `api`, ayrı worker container `worker` argümanıyla çalışır. Image entrypoint'i zaten `python -m app.cli`; yalnız argümanı değiştirin. Worker'a HTTP probe eklemeyin.
-5. Service hedef portu `8080`, dış erişim HTTPS Route olsun. Login ekranında `admin` veya `hr` ve Secret'a yazdığınız parola ile giriş yapın. LDAP zorunlu değildir. Gerçek LLM bağlantısını admin ekler; görevlerde kullanımı HR etkinleştirir. Gerçek endpoint eklenmeden üretimde mock değerlendirme çalışmaz.
+1. Build `aptilume:0.8.0` and push it to the organization registry. Do not pass secrets during build.
+2. Put Secret and workloads in the same OpenShift project. Expose the Secret as environment variables to bootstrap, API and worker.
+3. Set `APP_MODE=production` and `PUBLIC_BASE_URL=https://YOUR_ROUTE_HOST`. Mount the PostgreSQL CA at the URL's `sslrootcert` path. Provide shared writable `/app/data` and writable `/tmp`.
+4. Run the same image with the `bootstrap` argument and wait for success. It prepares tables, default instructions, the starter catalog and initial accounts.
+5. Start separate `api` and `worker` containers/pods. The entrypoint is already `python -m app.cli`; change only its argument. The API listens on port `8080`. Worker has no HTTP listener; do not apply API HTTP probes to it.
+6. Create Service/HTTPS Route and sign in with the configured accounts. Admin configures a real LLM connection; HR activates the task bindings. Production does not run mock model tasks.
 
-Secret'ın container bağlantısı:
+Container environment reference:
 
 ```yaml
 envFrom:
@@ -39,19 +40,22 @@ envFrom:
       name: aptilume-secrets
 ```
 
-Normal ortam ayarları (Secret değildir):
+A Secret-provided bootstrap `DATABASE_URL` authorizes only its exact database host/port when no explicit DB host/CIDR policy is supplied. Certificate verification, IP pinning and metadata/special-address blocks remain enforced. Explicit `DB_ALLOWED_HOSTS` or `OUTBOUND_ALLOWED_CIDRS` override this convenience default and must completely describe the permitted DB destination. Configure additional directory/LLM destinations separately. See the [production guide](../README.md#openshift--production-installation).
 
-| Ayar | Örnek |
-| --- | --- |
-| `APP_MODE` | `production` |
-| `PUBLIC_BASE_URL` | `https://aptilume.kurum.example` — gerçek Route kök adresi |
+## Users, roles and language
 
-İlk kurulumda Secret'taki `DATABASE_URL`, yalnız kendi PostgreSQL host ve portuna erişim izni verir; bu hedef için ayrıca DB host/CIDR listesi girilmez. TLS `verify-full`, DNS/IP sabitleme ve loopback/metadata/özel hedef engelleri korunur. Panelden başka DB hedefi eklemek bu izni genişletmez. İşletim ekibi `DB_ALLOWED_HOSTS` veya `OUTBOUND_ALLOWED_CIDRS` verirse açık ağ politikası önceliklidir ve tam DB hedefi/kurum içi ağı tanımlanmalıdır. Kurum CA'sı standart güven zincirindeyse URL'de `sslrootcert` belirtilmeyebilir. Route/proxy ve sonraki LLM/AD ağ ayarlarının ayrıntıları [README](../README.md#openshift--üretim-ayarları) içindedir.
+Sign in as HR. Create teams, role profiles and employees in **Teams and targets**. Then use **Identity and access → Create account** to link employee/manager accounts to profiles. Select a local manager to establish reporting scope. Names, titles and shared department names do not grant access.
 
-## Yeniden başlatma ve LDAP
+HR manages business identities. Integration administrators manage only administrator accounts; they cannot reset HR/employee passwords. Identity edits revoke affected sessions. Duplicate active profile links, cycles, self-lockout and removal of the last active local privileged identity are blocked. Sensitive writes require recent sign-in.
 
-Kalıcı DB, Secret ve `/app/data` korunur. Yeniden başlatma mevcut parolaları, yetkileri, pasifleştirilmiş hesabı veya anketleri sıfırlamaz. `BOOTSTRAP_*` değerleri sadece eksik hesabı ilk kez oluşturur; sonraki Secret değişikliği parola sıfırlamaz. `DATABASE_URL` ilk uygulama bağlantısını hazırlar; sonraki değişiklik mevcut uygulama deposunu kendiliğinden taşımaz veya panelde etkinleştirilmiş bağlantıyı ezmez. Uygulama DB parolası değişirse mevcut profildeki parola da panelden güncellenir; depo taşıması mevcut offline migration sürecini kullanır.
+English is the first-run interface default. EN/TR is remembered in the browser. New assessment periods retain the selected language for generation, evaluation explanations and insights. Switching language does not rewrite existing content.
 
-LDAP hazır olduğunda admin panelinden AD bağlantısını ve HR grup eşleştirmesini girin. Kurumsal HR hesabıyla girişi doğrulayın; mevcut yerel hesaplar otomatik silinmez veya kurumsal hesaba dönüştürülmez. Yerel HR hesabının emekliye ayrılması ve admin kurtarma hesabının yönetimi ayrıca planlanır.
+Active Directory is an optional connector. OIDC/SAML connectors are not included. Validate corporate identities before planning local-account retirement; the last local privileged-account protection remains active.
 
-Mevcut kurulumların sürüm yükseltmesinde önce yazmaları durdurup `migrate` çalıştırın; `bootstrap` bir sürüm yükseltme/migration aracı değildir. Kurum deployment'ını bu repo otomatik oluşturmaz veya yayınlamaz.
+## Restart and upgrade behavior
+
+Preserve DB, Secret and shared data. Restart/bootstrap does not reset passwords, roles, inactive accounts or assessments. `BOOTSTRAP_*` is used only when the corresponding account is missing. Changing the Secret does not reset an existing password.
+
+`DATABASE_URL` prepares the initial application binding. Later changes do not silently migrate or replace the active profile. Update an existing application profile's password when database credentials rotate; use controlled offline migration for a destination change.
+
+For upgrades, stop writers and run `migrate` before bootstrap/restart. Operations owns deployment, certificates, storage, network policy, backup and recovery.

@@ -1,31 +1,19 @@
-# Aptilume 0.6.0 — AI soru setine İK düzenlemesi ve yayın
+# HR question editing and publication
 
-5 Kasım 2026. AI, dönemin sabitlenmiş ekip/rol/yetkinlik bağlamından başlangıç sorularını üretmeye devam eder. Üretilen set **İçerik incelemesi** durumuna gelir; çalışanlara atanmaz.
+AI generation creates a reviewable draft for each role, with a shared common block. HR can add, duplicate, edit and remove questions, then save without publishing. Managers may inspect their authorized sets; they cannot approve or publish.
 
-## İK akışı
+## Editing
 
-1. **Ölçüm dönemleri → Soruları düzenle ve yayınla** ekranını açın.
-2. Ortak soru setini veya bir ekip/rol grubunu seçin. Ortak soru tek kayıt olarak tutulur; o dönemin tüm rol formlarında aynıdır.
-3. Soru ekleyin, mevcut soruyu kopyalayın, düzenleyin veya silin. Metin, yetkinlik, grup, soru türü, seçenekler/doğru cevap, değerlendirme referansı, kanıt türü ve açık uçlu sorunun ölçüt adı/ağırlığı/davranış/0–4 puan açıklamaları düzenlenebilir. Yetkinlikler dönemin sabitlenmiş hedefleriyle sınırlıdır. Çalışan doğru cevabı veya rubriği görmez.
-4. **Soruyu kaydet** ile değişikliği kalıcı taslağa yazın. Kaydetme LLM çağırmaz. Yayın şartlarını henüz sağlamayan taslak saklanabilir; eksikler editörde listelenir.
-5. **Seti onayla** yalnızca yayına hazır hale getirir. **Onayla ve yayınla** son özeti gösterir; onaydan sonra çalışan formlarını oluşturur ve yanıt toplamayı açar. Onaylanmış sette tekrar düzenleme yapılırsa onay kalkar ve set içerik incelemesine döner.
-6. Yayımdan sonra soru değiştirme/ekleme/silme API'de engellenir. Yeni içerik için yeni dönem gerekir. Yanıt gönderimi puanlamayı başlatmaz; değerlendirme yine dönem kapanınca worker'da yürür.
+Use **Assessment periods → Edit and publish questions**. Select the common or role group. Edit text, competency, question type, options/correct answer, reference, rubric weights, descriptors and 0–4 anchors. All assigned questions are required. Each competency needs at least one open response and exactly one self-assessment question; level suggestions require two independent written observations. Optional single-choice questions support 2–6 options and exactly one correct answer. Maximum assignment size is 60 questions.
 
-İK düzenleme/onay/yayın yetkisine sahiptir. Yönetici kendi tam kapsamındaki dönemleri oluşturabilir, AI üretimini başlatabilir ve soru setini salt okunur inceleyebilir; İK onayı ve yayını bekler. Çalışan/entegrasyon admini soru seti yazarak veya cevap anahtarına erişerek kapsamı aşamaz.
+Saved changes are durable drafts. Incomplete coverage can be saved but blocks publication. Changes to common questions affect every role in that period. The initial blueprint contains 22 questions per role; HR editing can change the final count. Reports use the assigned count rather than assuming two open questions per competency.
 
-## Kapsam ve ölçüm kuralları
+## Approval and versioning
 
-AI başlangıç üretimi 22 sorudur; İK sonrasında sayı değişebilir. Katılımcı başına en fazla 60 soru vardır. Her hedef yetkinlikte en az bir açık uçlu soru ve tam bir öz beyan sorusu korunur. Tek seçim soruları isteğe bağlıdır; 2–6 seçenek ve tam bir doğru cevap gerekir. Öz beyan L1–L5 ve deneyimim yok eşlemesini korur. Açık uçlu rubrikler L1–L3 göstergelerini, pozitif ağırlıkları ve 0–4 puan açıklamalarını içerir. Tüm atanmış sorular zorunludur.
+**Approve set** marks it ready without opening forms. **Approve and publish** explicitly approves and opens the survey. Any later draft edit invalidates the previous approval. Published content is immutable.
 
-Yazılı puan ve kapsamın paydası gerçekten atanmış açık uçlu sorulardır. Bir veya üç açık uçlu soruda sabit iki soruluk varsayım kullanılmaz. Seviye önerisi yine en az iki ayrı sorudan destek gerektirir; tek yazılı soruda puan olsa da seviye üretilmez. L4/L5 bu anketle doğrulanmaz. Öz beyan ve çoktan seçmeli puanları ayrı göstergelerdir. Soru/rubrik içeriğinin hash'i karşılaştırma grubu izine eklenir; farklı düzenlenmiş setler aynı içerik sayılmaz. Eski yayınlanmış snapshot'lar yeniden yazılmaz.
+Campaign/question-set revisions reject stale saves and concurrent approval/publication conflicts. Approval records include actor/version/content hash; audit history retains edits. Period snapshots preserve the competency and role context used to generate the set.
 
-## Sürüm, audit ve API
+## Language
 
-Aynı seti iki İK kullanıcısı düzenlediğinde veya düzenleme/yayın çakıştığında dönem satırı üzerinde atomik kilit/sürüm kontrolü uygulanır; eski kayıt 409 alır. Soru değişiklikleri, önce/sonra içerik, aktör ve set sürümüyle audit'e yazılır. Onay izi ve soru içeriği hash'leri yayın snapshot'ına taşınır. Onaylanan son set ile dağıtılan sorular aynı işlem sınırında korunur.
-
-- `GET /api/v1/campaigns/{id}/question-set`: yetkili inceleme görünümü, dönem `version`, içerik `revision`, gruplar, sorular ve yayın eksikleri.
-- `POST /api/v1/campaigns/{id}/questions`: ekleme; `PATCH .../questions/{qid}`: düzenleme. Gövde `expected_version` içerir.
-- `DELETE .../questions/{qid}?expected_version=N`: atanmamış taslak soruyu siler; audit içeriği korunur. Başka döneme ait soru ID'si kabul edilmez.
-- `POST .../approve` ve `POST .../open`: yalnız İK; gövde `{"expected_version": N}` zorunludur. Önceki sürümün gövdesiz HTTP çağrıları güncellenmelidir. Onay/yayın cevabındaki `row_version` sonraki işlemin beklenen sürümüdür.
-
-Yeni şema migration'ı yoktur; mevcut dönem config, row_version, soru version ve audit alanları kullanılır. API ile worker birlikte `aptilume:0.6.0` image'a güncellenir. Önceki 0.4 şema kurulumu gereksinimleri sürer. Kurum AD/LLM/CA, ölçüm kalibrasyonu, OpenShift ve kurum güvenlik kabulü ayrıca yapılmalıdır.
+New periods retain the selected EN/TR language for AI content. Interface language can change without rewriting a draft, response or published question. Editing authored text is an explicit HR action.

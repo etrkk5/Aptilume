@@ -1,6 +1,6 @@
+import { t, translateNode, formatLocale } from "./i18n";
 import React, { useState } from "react";
 import { Moon, Sun } from "lucide-react";
-
 type Theme = "light" | "dark";
 function initialTheme(): Theme {
   try {
@@ -13,7 +13,6 @@ function initialTheme(): Theme {
 }
 const initial = initialTheme();
 document.documentElement.dataset.theme = initial;
-
 export function ThemeSwitch() {
   const [theme, setTheme] = useState<Theme>(
     () => (document.documentElement.dataset.theme as Theme) || initial,
@@ -24,8 +23,8 @@ export function ThemeSwitch() {
     <button
       type="button"
       className="icon-btn theme-toggle"
-      aria-label={label}
-      title={label}
+      aria-label={t(label)}
+      title={t(label)}
       onClick={() => {
         document.documentElement.dataset.theme = next;
         setTheme(next);
@@ -34,7 +33,7 @@ export function ThemeSwitch() {
         } catch {}
       }}
     >
-      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+      {translateNode(theme === "dark" ? <Sun size={18} /> : <Moon size={18} />)}
     </button>
   );
 }

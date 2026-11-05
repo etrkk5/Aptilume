@@ -2088,11 +2088,9 @@ textarea {
   gap: 20px;
 }
 .corporate-brand > img {
-  width: 176px;
-  height: 44px;
-  background: white;
-  border-radius: 5px;
-  padding: 10px 12px;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
   object-fit: contain;
 }
 .corporate-brand > span {
@@ -2191,10 +2189,8 @@ textarea {
   pointer-events: none;
 }
 .login-intro > img {
-  width: 190px;
-  background: #fff;
-  border-radius: 5px;
-  padding: 12px 16px;
+  width: 76px;
+  height: 76px;
 }
 .login-intro > div {
   margin: 100px 0;
@@ -2410,19 +2406,25 @@ textarea {
 }
 @media (max-width: 1100px) {
   .corporate-brand > img {
-    width: 150px;
+    width: 52px;
   }
   .user-menu {
     left: 12px;
   }
 }
 @media (max-width: 900px) {
-  .corporate-brand > img,
   .corporate-brand > span {
     display: none;
   }
+  .corporate-brand > img {
+    display: block;
+    width: 38px;
+    height: 38px;
+  }
   .corporate-brand {
     padding: 0;
+    align-items: center;
+    gap: 0;
   }
   .user-menu {
     top: 65px;
@@ -2449,8 +2451,9 @@ textarea {
     padding: 26px 30px;
   }
   .login-intro > img {
-    width: 145px;
-    padding: 8px 10px;
+    width: 64px;
+    height: 64px;
+    padding: 0;
   }
   .login-intro > div {
     margin: 32px 0 0;
@@ -2546,11 +2549,112 @@ textarea {
   flex-shrink: 0;
 }
 .startup-logo {
-  width: 190px;
-  background: #fff;
-  border-radius: 7px;
-  padding: 12px 16px;
+  width: 76px;
+  height: 76px;
   margin-bottom: 20px;
+}
+.identity-intro,
+.identity-toolbar,
+.identity-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px;
+}
+.language-switch {
+  width: 68px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.login-theme {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.identity-panel .panel-head {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.identity-intro {
+  align-items: flex-start;
+  color: var(--muted);
+}
+.identity-intro > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.identity-intro p {
+  margin: 0;
+  line-height: 1.7;
+}
+.identity-toolbar,
+.identity-pagination {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.identity-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  max-width: 440px;
+}
+.identity-search input {
+  min-width: 0;
+  width: 100%;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.identity-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+.identity-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  text-align: left;
+}
+.identity-table td b {
+  color: var(--text);
+}
+.identity-table th,
+.identity-table td {
+  padding: 15px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.identity-table th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.identity-table small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+.identity-table .btn {
+  white-space: nowrap;
 }
 :root[data-theme="dark"] {
   color-scheme: dark;

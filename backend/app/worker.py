@@ -102,7 +102,11 @@ class Worker:
             elif job.kind == "export":
                 from .exports import build_export
 
-                build_export(self.store, job.payload["export_id"])
+                build_export(
+                    self.store,
+                    job.payload["export_id"],
+                    language=job.payload.get("language", "tr"),
+                )
             self.finish(job, "done")
         except Exception as exc:
             permanent = isinstance(
@@ -170,6 +174,9 @@ class Worker:
             answer = get(s, Answer, job.payload["answer_id"])
             q = get(s, Question, answer.question_id)
             payload = {
+                "language": get(s, Campaign, q.campaign_id).config.get(
+                    "language", "tr"
+                ),
                 "answer": answer.text,
                 "question": q.prompt,
                 "rubric": q.rubric,
@@ -204,7 +211,12 @@ class Worker:
             flags.append("evidence_type_mismatch")
         from .quality import assess_quality
 
-        quality = assess_quality(answer.text, grade, bool(usage.get("simulated")))
+        quality = assess_quality(
+            answer.text,
+            grade,
+            bool(usage.get("simulated")),
+            language=payload["language"],
+        )
         if quality:
             flags.append("answer_quality_" + quality["category"])
             if not quality["evidence_quotes"]:
@@ -323,6 +335,9 @@ class Worker:
         with self.store.session() as s:
             data = metrics(build_snapshot(s, job.run_id))
             data.pop("rows", None)
+            data["language"] = get(
+                s, Campaign, get(s, Run, job.run_id).campaign_id
+            ).config.get("language", "tr")
         config = self.store.resolve(version_id=job.payload["profile_version"])
         from .policies import policy, DEFAULT_POLICY_ID
 

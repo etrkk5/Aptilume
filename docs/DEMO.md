@@ -1,67 +1,36 @@
-# Aptilume — 5 Kasım 2026 sunum rehberi
+# Presentation workspace
 
-## Başlatma ve mod seçimi
-
-Sunum modu, üretim kimlik doğrulamasını gevşetmeden ayrı bir veri alanı kullanır. Tek seçim parametresi `APP_MODE` değeridir:
-
-| Değer | Davranış |
-|---|---|
-| `demo` | DATA_DIR/presentation-demo altında ayrı SQLite depoları, yerel anahtar, rastgele parolalı dört rol, 30 sentetik çalışan, 42 yetkinlik, yayımlanmış sonuçlar ve açık anket. LLM mock çalışır; sunum için gerçek endpoint gerekmez. |
-| `production` | Normal/kurumsal depolar, gerçek AD/LLM, HTTPS/CA, kalıcı Secret ve güçlü ilk parola kuralları. Demo kimlikleri, demo deposu ve mock değerlendirme reddedilir. Varsayılan mod budur. |
-| `development` / `test` | Geliştirme/test davranışı; sunum hesapları otomatik açılmaz. |
-
-Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.7.0` image ile:
+Set `APP_MODE=demo` in the local `.env`, build the current image and run:
 
 ```bash
+docker build -t aptilume:0.8.0 .
 docker compose -f compose.dev.yml up -d --no-build
 docker compose -f compose.dev.yml exec -T api python -m app.cli demo-accounts
 ```
 
-Uygulama: http://127.0.0.1:8080/ . Parolalar ilk kurulumda oluşturulur; üstteki komut yalnızca demo modunda aynı parolaları gösterir. Yeniden başlatma sunum düzenlemelerini veya anket taslaklarını sıfırlamaz. Parolalar web ekranında/API'de/loglarda yoktur; işletim erişimi olan kişi demo-access.json dosyasına erişebilir. Sadece demo deposunda düz metin kurtarma kopyası, DB'de Argon2 hash bulunur. Bu dosya ve runtime Git/Docker build bağlamı dışında tutulur.
+Open http://127.0.0.1:8080. Demo creates an isolated `DATA_DIR/presentation-demo` store, a local key, mock provider, four role accounts and synthetic assessment data. It does not inherit production `CONTROL_STORE_URL`, `DATABASE_URL` or `SECRET_ENCRYPTION_KEY`. Repeated bootstrap preserves accounts, passwords and edits. Credentials are random and shown only by the explicit operations command, not the web API or startup logs.
 
-## Hesapların kapsamı
+| Account | Scope |
+| --- | --- |
+| `hr` | Organization-wide business and integration views. |
+| `manager` | Assigned Data & Analytics reporting tree. |
+| `employee` | Their own profile, forms and results. |
+| `admin` | Integration configuration only. |
 
-| Kullanıcı | Rol | Gösterilecek ekranlar |
-|---|---|---|
-| `hr` | İnsan kaynakları | 3 ekip / 30 çalışan, kurum özeti, dönemler, değerlendirmeler, Excel, gelişim planları, bağlantı ve güvenlik olayları. |
-| `manager` | Yönetici | Data & Analytics ekibi; kendisi dahil 10 profil, ekip hedefleri, sonuç ve gelişim planları. Diğer 20 çalışan ve entegrasyon ayarları kapalı. |
-| `employee` | Çalışan | Data & Analytics içindeki Ekin; yalnız kendi profili, anketi, sonuçları ve gelişim planı. |
-| `admin` | Entegrasyon admini | Yalnız bağlantı ayarları; çalışan/ekip/sonuç verisi kapalı. Bu modda admin/admin geçersizdir; üretilen demo parolasını kullanın. |
+These are regular scoped sessions. Existing presentation identities are read-only in identity management. New organization accounts are provisioned in development/production local identity stores. The bootstrap `admin/admin` development password does not apply to demo accounts.
 
-Girişler gerçek oturum, CSRF, hesap kotası ve sunucu tarafı kapsam kontrollerinden geçer. Menü değiştirme veya görünmeyen bir test giriş adresi kullanılmaz. Aynı tarayıcıdaki sekmeler aynı oturumu paylaşır; roller arasında sağ alttaki/sol bardaki hesap menüsünden çıkış yapın. İki rolü aynı anda göstermek için ayrı tarayıcı profili veya gizli pencere kullanın.
+## Suggested walkthrough
 
-## Önerilen sunum sırası
+1. HR: dashboard, team/competency filters, participation, result information and scoped Excel.
+2. HR: a draft question set; edit/add/remove questions, save, approve and publish. Publication assigns forms and locks question content.
+3. Manager: their reporting scope and development actions.
+4. Employee: own profile and required questions; draft autosave and explicit submission.
+5. HR: close a period, start background evaluation, inspect quality cases, record a reasoned decision and publish results.
+6. Admin: model/database profiles and optional directory connector. Real corporate credentials are not needed for the mock walkthrough.
+7. EN/TR and light/dark controls: interface language can change while existing data retains its authored language. New periods use the selected language.
 
-1. `hr` ile başlayın. Yayımlanmış **AI Skills Baseline · Kasım 2026** sonuçlarını, katılımı ve yetkinlik haritasını gösterin. Rapor bilgileri ve Excel metodolojisi sentetik/mock kaynağı belirtir.
-2. `manager` ile Data & Analytics kapsamını, ekip bağlamı/hedeflerini ve gelişim planı oluşturmayı gösterin.
-3. `employee` ile kendi profilini ve **AI Readiness Pulse · Pilot** anketini açın. Bir açık yanıt yazıp sayfayı yenileyerek taslağın korunduğunu gösterin. Sunum sonunda formun durumunu değiştirmek istemiyorsanız göndermeyin.
-4. `admin` ile LLM ve DB profillerini gösterin. Gerçek kurum endpointi/sırrı girmeyin; sunumda mevcut mock bağlantı yeterlidir. Adminin iş verisini göremediğini anlatın.
-5. İstenirse `hr` ile yeni dönem → soru üretimi → onay/açılış → yanıt → kapanış → ayrı toplu değerlendirme → yayın akışını uygulayın. Soru/puanlar deterministik mock sonuçlarıdır; gerçek model kalitesini kanıtlamaz.
+Mock scores are deterministic synthetic fixtures and do not establish real-model accuracy. The product has one original Aptilume brand. Presentation data is identified where needed for interpreting reports.
 
-Ana ekranda demo etiketi veya ek logo eklenmez; Yapı Kredi markası ve Aptilume görünümü korunur. Güvenlik incelemesi raporları önceki sürüme aittir; bu sürüm demo ayrımı için ek regresyonlarla doğrulanmıştır.
+## Production transition
 
-## Üretime geçiş
-
-Kurum ayarları hazır olduğunda `APP_MODE=production` yapıp bootstrap, API ve worker süreçlerini yeniden başlatın. Mod değişikliği canlı süreçte otomatik uygulanmaz. OpenShift'te aynı değer yeni pod'ların ortamına verilir; dağıtımı kurum ekibi yürütür.
-
-Demo modunda üretim `CONTROL_STORE_URL` ve `SECRET_ENCRYPTION_KEY` kullanılmaz; üretime dönünce normal ayarlar devreye girer. Demo verisi/hesabı üretime kopyalanmaz. Üretim deposuna yanlışlıkla demo kimliği kopyalanırsa API ve worker başlangıcı engellenir. Ayrı ortamlar için ayrı PVC/Secret kullanılması önerilir.
-
-Tek parametre modu seçer; gerçek AD, LLM, DB/CA, PUBLIC_BASE_URL, kalıcı anahtar, güçlü bootstrap parola, ağ/MFA ve kurum kabulünün yerini almaz. Önceki geliştirme deposunda admin/admin varsa üretim başlangıcı onu reddeder. Yerel Compose kurumsal deployment şablonu değildir. Güvenlik kabul listesi [SECURITY_REMEDIATION.md](SECURITY_REMEDIATION.md) içindedir.
-
-## 0.4.0 sunumuna eklenenler
-
-- İK: Ölçüm politikası sayfasında varsayılan soru/değerlendirme talimatlarını gösterin. Düzenleme taslaktır; yeni sürüm olarak kaydedilince yeni işlere uygulanır.
-- İK: Yanıt kalitesi menüsünde “Yanıt Kalitesi · Örnek” sentetik kaydını inceleyin. Karar kaydetmeden modalı kapatırsanız sunumda bekleyen örnek korunur. Gerekirse `demo-quality-sample` komutu örneği yalnız bir kez ekler.
-- Yeni ölçüm: “Tüm ekipler” ile toplu seçim/kaldırma; ayrıca tek tek seçim.
-- Çalışan: Tüm sorular zorunlu; boş sayfadan ilerleme engellenir. “Deneyimim yok” dürüst ve geçerli bir yanıttır.
-- Dashboard: Ekip/rol/yetkinlik/bölüm filtrelerini ve “Diğer filtreler” alanını gösterin; Excel seçili kapsamı taşır. Oranları yorumlarken geçerli kişi sayısını ve hedef ölçüm kapsamını birlikte okuyun.
-
-Detaylı akış ve yükseltme: [0.4.0 özellikleri](FEATURES_0_4.md).
-
-## 0.5.0 katalog yönetimi
-
-İK hesabı → Yetkinlik kataloğu → Yetkinlik ekle. Ad, tanım ve beş seviye tanımını girin. Karttan **Düzenle**, **Yetkinliği sil** veya arşivde **Geri yükle** işlemlerini gösterin. Silme geçmişi korumak için arşivler; üç zorunlu ortak yetkinlik silinemez. Yeni yetkinliği Ekipler ve hedefler içindeki ekip/rol hedeflerine ekleyerek sonraki ölçümün üretimine dahil edin.
-
-## 0.6.0 İK soru editörü
-
-İK ile yeni dönem oluşturun → Soruları hazırla → Soruları düzenle ve yayınla. Ortak/rol grubunu seçip soru ekleyin veya metin/seçenek/rubriği değiştirin; Soruyu kaydet ile kalıcı taslağı gösterin. Seti onayla henüz anket açmaz. Onay sonrası bir düzeltme seti yeniden incelemeye döndürür. Onayla ve yayınla çalışan formlarını oluşturur; sonrasında soru değişiklikleri engellenir. Yönetici yalnız kendi döneminin sorularını inceleyebilir; onay/yayın için İK gerekir. [Detaylar](FEATURES_0_6.md).
+`APP_MODE=production` selects the organization store and rejects demo identities/data and mock model execution. Restart all processes after changing mode. Provide real HTTPS/CA, persistent secrets, PostgreSQL, permitted destinations and an approved LLM profile as described in [FIRST_INSTALL](FIRST_INSTALL.md). Local accounts work without directory integration. Real organizational acceptance remains separate from a successful presentation.

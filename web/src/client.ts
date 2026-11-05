@@ -1,3 +1,4 @@
+import { getLocale } from "./i18n";
 let csrfToken = "";
 let lastActivity = Date.now();
 for (const event of ["pointerdown", "keydown", "scroll"]) {
@@ -26,6 +27,7 @@ export async function api(path: string, method = "GET", data?: any) {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
+      "X-Aptilume-Language": getLocale(),
       ...(Date.now() - lastActivity > 60000
         ? { "X-Background-Request": "1" }
         : {}),

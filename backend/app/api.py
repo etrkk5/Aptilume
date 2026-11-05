@@ -27,6 +27,7 @@ from .validation import (
     ExportInput,
 )
 from .security import AuthService, install_auth, current_actor
+from .language import error_message, request_language
 from .access import (
     require_business,
     require_manager,
@@ -54,6 +55,7 @@ class ProfileInput(BaseModel):
 class CampaignInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     team_ids: list[str] | None = Field(default=None, max_length=100)
+    language: Literal["en", "tr"] | None = None
 
 
 class AnswerInput(BaseModel):
@@ -82,7 +84,7 @@ def create_app(settings=None, store=None, auth_service=None):
 
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.7.0",
+        version="0.8.0",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
@@ -97,7 +99,11 @@ def create_app(settings=None, store=None, auth_service=None):
             status_code=422,
             content={
                 "code": "invalid_request",
-                "message": "Alanların türünü, boyutunu ve zorunlu değerlerini kontrol edin.",
+                "message": error_message(
+                    "invalid_request",
+                    "Alanların türünü, boyutunu ve zorunlu değerlerini kontrol edin.",
+                    request_language(request),
+                ),
                 "errors": [
                     {
                         "field": ".".join(str(x)[:50] for x in error["loc"][:6]),
@@ -124,7 +130,9 @@ def create_app(settings=None, store=None, auth_service=None):
             status_code=exc.status,
             content={
                 "code": exc.code,
-                "message": exc.message,
+                "message": error_message(
+                    exc.code, exc.message, request_language(request)
+                ),
                 "correlation_id": correlation_context.get(),
             },
         )
@@ -135,7 +143,11 @@ def create_app(settings=None, store=None, auth_service=None):
             status_code=503,
             content={
                 "code": "application_store_unavailable",
-                "message": "Veri deposuna ulaşılamadı. Bağlantı ayarlarını kontrol edin; kayıt tamamlanmadı.",
+                "message": error_message(
+                    "application_store_unavailable",
+                    "Veri deposuna ulaşılamadı. Bağlantı ayarlarını kontrol edin; kayıt tamamlanmadı.",
+                    request_language(request),
+                ),
                 "correlation_id": correlation_context.get(),
             },
         )
@@ -480,10 +492,13 @@ def create_app(settings=None, store=None, auth_service=None):
             return asdict(person)
 
     @app.post("/api/v1/campaigns")
-    def new_campaign(p: CampaignInput):
+    def new_campaign(p: CampaignInput, request: Request):
+        from .language import request_language
+
+        language = p.language or request_language(request)
         actor = require_manager()
         if actor.hr:
-            return create_campaign(store, p.name, p.team_ids)
+            return create_campaign(store, p.name, p.team_ids, language=language)
         with store.session() as s:
             allowed = visible_team_ids(s, actor)
             selected = set(p.team_ids) if p.team_ids else allowed
@@ -502,7 +517,9 @@ def create_app(settings=None, store=None, auth_service=None):
                 )
                 if actor.sees(pid)
             ]
-        return create_campaign(store, p.name, list(selected), participant_ids=people)
+        return create_campaign(
+            store, p.name, list(selected), participant_ids=people, language=language
+        )
 
     @app.post("/api/v1/campaigns/{cid}/generate-questions", status_code=202)
     def generate(cid: str):
@@ -927,7 +944,7 @@ def create_app(settings=None, store=None, auth_service=None):
         return store.activate_db(pid, p.copy_existing)
 
     @app.post("/api/v1/exports", status_code=202)
-    def export(value: ExportInput):
+    def export(value: ExportInput, request: Request):
         p = value.model_dump()
         with store.session() as s:
             actor = require_business()
@@ -972,7 +989,7 @@ def create_app(settings=None, store=None, auth_service=None):
                 Job(
                     kind="export",
                     dedupe_key=f"export:{e.id}",
-                    payload={"export_id": e.id},
+                    payload={"export_id": e.id, "language": request_language(request)},
                 )
             )
             return asdict(e)
@@ -1018,6 +1035,9 @@ def create_app(settings=None, store=None, auth_service=None):
     from .product import install_product_routes
 
     install_product_routes(app, store)
+    from .identities import install_identity_routes
+
+    install_identity_routes(app, store)
     from .catalog import install_catalog_routes
 
     install_catalog_routes(app, store)

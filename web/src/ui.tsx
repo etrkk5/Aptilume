@@ -1,3 +1,4 @@
+import { t, translateNode, formatLocale } from "./i18n";
 import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 export function Button({
@@ -14,7 +15,7 @@ export function Button({
       disabled={disabled}
       {...props}
     >
-      {children}
+      {translateNode(children)}
     </button>
   );
 }
@@ -61,16 +62,20 @@ export function Modal({ title, children, onClose, wide = false }: any) {
         className={wide ? "modal modal-wide" : "modal"}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={t(title)}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
-          <h2>{title}</h2>
-          <button className="icon-btn" aria-label="Kapat" onClick={onClose}>
+          <h2>{translateNode(title)}</h2>
+          <button
+            className="icon-btn"
+            aria-label={t("Kapat")}
+            onClick={onClose}
+          >
             <X size={20} />
           </button>
         </div>
-        {children}
+        {translateNode(children)}
       </section>
     </div>
   );

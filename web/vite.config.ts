@@ -15,6 +15,7 @@ export default defineConfig({
         manualChunks: {
           charts: ["echarts/core"],
           react: ["react", "react-dom"],
+          localization: ["./src/i18n.ts"],
         },
       },
     },

@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 from starlette.datastructures import Headers
 from .store import DomainError
 from .audit import correlation_context, record
+from .language import error_message
 
 CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'"
 
@@ -241,7 +242,13 @@ class SecurityEnvelope:
                 status=status,
             )
             await JSONResponse(
-                {"code": code, "message": message, "correlation_id": request_id},
+                {
+                    "code": code,
+                    "message": error_message(
+                        code, message, headers.get("x-aptilume-language", "en")
+                    ),
+                    "correlation_id": request_id,
+                },
                 status_code=status,
             )(scope, receive, secure_send)
         except Exception:
@@ -252,7 +259,11 @@ class SecurityEnvelope:
             await JSONResponse(
                 {
                     "code": "internal_error",
-                    "message": "İşlem tamamlanamadı. Destek ekibine istek kimliğini iletin.",
+                    "message": error_message(
+                        "internal_error",
+                        "İşlem tamamlanamadı. Destek ekibine istek kimliğini iletin.",
+                        headers.get("x-aptilume-language", "en"),
+                    ),
                     "correlation_id": request_id,
                 },
                 status_code=500,

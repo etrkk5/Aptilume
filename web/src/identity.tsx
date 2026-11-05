@@ -1,7 +1,9 @@
+import { t, translateNode, formatLocale } from "./i18n";
 import React, { useState, useEffect } from "react";
 import { LogIn, LoaderCircle, ShieldCheck } from "lucide-react";
 import { api, setCsrf } from "./client";
 import { ThemeSwitch } from "./theme";
+import { LanguageSwitch } from "./language-switch";
 export function useIdentity() {
   const [user, setUser] = useState<any>(undefined);
   useEffect(() => {
@@ -57,20 +59,21 @@ export function Login({ onLogin }: any) {
   return (
     <div className="login-page">
       <div className="login-theme">
+        <LanguageSwitch />
         <ThemeSwitch />
       </div>
       <section className="login-intro">
-        <img src="/brand/yapi-kredi-logo.svg" alt="Yapı Kredi" />
+        <img src="/brand/aptilume-mark.svg" alt={t("Aptilume")} />
         <div>
-          <span>AI SKILLS INTELLIGENCE</span>
-          <h1>Aptilume</h1>
+          <span>{t("AI SKILLS INTELLIGENCE")}</span>
+          <h1>{t("Aptilume")}</h1>
           <p>
-            Yetkinliklerinizi keşfedin.
+            {t(" Yetkinliklerinizi ke\u015Ffedin. ")}
             <br />
-            Gelişiminizi birlikte planlayın.
+            {t(" Geli\u015Fiminizi birlikte planlay\u0131n. ")}
           </p>
         </div>
-        <small>Yapı Kredi · Kurum içi yetkinlik platformu</small>
+        <small>{t("Measure capability. Illuminate potential.")}</small>
       </section>
       <section className="login-form-wrap">
         <form
@@ -91,10 +94,14 @@ export function Login({ onLogin }: any) {
           <div className="login-security">
             <ShieldCheck size={24} />
           </div>
-          <h2>Hesabınıza giriş yapın</h2>
-          <p>Kurumsal kullanıcı adınız ve parolanızla devam edin.</p>
+          <h2>{t("Hesab\u0131n\u0131za giri\u015F yap\u0131n")}</h2>
+          <p>
+            {t(
+              "Kullan\u0131c\u0131 ad\u0131n\u0131z ve parolan\u0131zla \u00E7al\u0131\u015Fma alan\u0131n\u0131za eri\u015Fin.",
+            )}
+          </p>
           <label htmlFor="login-user">
-            Kullanıcı adı
+            {t(" Kullan\u0131c\u0131 ad\u0131 ")}
             <input
               id="login-user"
               required
@@ -102,11 +109,11 @@ export function Login({ onLogin }: any) {
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Kullanıcı adınız"
+              placeholder={t("Kullan\u0131c\u0131 ad\u0131n\u0131z")}
             />
           </label>
           <label htmlFor="login-password">
-            Parola
+            {t(" Parola ")}
             <input
               id="login-password"
               type="password"
@@ -116,22 +123,28 @@ export function Login({ onLogin }: any) {
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
-          {error && (
-            <div className="notice error" role="alert">
-              {error}
-            </div>
+          {translateNode(
+            error && (
+              <div className="notice error" role="alert">
+                {translateNode(error)}
+              </div>
+            ),
           )}
           <button className="btn primary" disabled={busy}>
-            {busy ? (
-              <LoaderCircle className="spin" size={17} />
-            ) : (
-              <LogIn size={17} />
-            )}{" "}
-            Giriş yap
+            {translateNode(
+              busy ? (
+                <LoaderCircle className="spin" size={17} />
+              ) : (
+                <LogIn size={17} />
+              ),
+            )}
+            {translateNode(" ")}
+            {t(" Giri\u015F yap ")}
           </button>
           <div className="login-help">
-            Giriş sorunu yaşıyorsanız kurumunuzun entegrasyon yöneticisine
-            başvurun.
+            {t(
+              " Giri\u015F sorunu ya\u015F\u0131yorsan\u0131z kurumunuzun entegrasyon y\u00F6neticisine ba\u015Fvurun. ",
+            )}
           </div>
         </form>
       </section>

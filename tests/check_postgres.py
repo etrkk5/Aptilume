@@ -95,6 +95,57 @@ def check_initial_postgres_install(host):
                 version = session.get(ProfileVersion, binding.version_id)
                 assert version.config["engine"] == "postgresql"
                 assert store.decrypt(version.secret) == "fixture-only"
+            with TestClient(create_app(store=store)) as hr_client:
+                logged = hr_client.post(
+                    "/api/v1/auth/login",
+                    json={"username": "hr", "password": "Fixture-people-58!"},
+                )
+                assert logged.status_code == 200
+                hr_client.headers["X-CSRF-Token"] = logged.json()["csrf_token"]
+                users = hr_client.get("/api/v1/admin/users").json()
+                payload = {
+                    "username": "fixture.operator",
+                    "display_name": "Fixture operator",
+                    "role": "admin",
+                    "password": "Fixture-operator-79!",
+                    "expected_version": users["version"],
+                }
+                created = hr_client.post("/api/v1/admin/users", json=payload)
+                assert created.status_code == 201, created.text
+                assert (
+                    hr_client.post(
+                        "/api/v1/admin/users",
+                        json={**payload, "username": "stale.operator"},
+                    ).status_code
+                    == 409
+                )
+                with TestClient(create_app(store=store)) as admin_client:
+                    logged = admin_client.post(
+                        "/api/v1/auth/login",
+                        json={
+                            "username": "fixture.operator",
+                            "password": "Fixture-operator-79!",
+                        },
+                    )
+                    assert logged.status_code == 200
+                    admin_client.headers["X-CSRF-Token"] = logged.json()["csrf_token"]
+                    listing = admin_client.get("/api/v1/admin/users").json()
+                    assert listing["total"] == 2 and all(
+                        u["roles"] == ["admin"] for u in listing["items"]
+                    )
+                    assert admin_client.get("/api/v1/skills").status_code == 403
+                    assert (
+                        admin_client.post(
+                            "/api/v1/admin/users",
+                            json={
+                                **payload,
+                                "username": "forged.hr",
+                                "role": "hr",
+                                "expected_version": listing["version"],
+                            },
+                        ).status_code
+                        == 403
+                    )
             store.engine.dispose()
             store.control.dispose()
     finally:

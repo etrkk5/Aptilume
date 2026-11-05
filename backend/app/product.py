@@ -44,7 +44,7 @@ def workspace(store):
         return (
             row.value
             if row
-            else {"name": "Yapı Kredi Teknoloji", "timezone": "Europe/Istanbul"}
+            else {"name": "Aptilume Workspace", "timezone": "Europe/Istanbul"}
         )
 
 

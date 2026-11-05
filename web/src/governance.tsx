@@ -1,3 +1,4 @@
+import { t, translateNode, formatLocale } from "./i18n";
 import React, { useEffect, useState, useRef } from "react";
 import {
   ArrowUpRight,
@@ -19,8 +20,7 @@ export const qualityLabels: Any = {
   insufficient_content: "Değerlendirme için yetersiz içerik",
   instruction_attempt: "Talimat yönlendirme içeren yanıt",
 };
-const when = (s: string) => new Date(s).toLocaleString("tr-TR");
-
+const when = (s: string) => new Date(s).toLocaleString(formatLocale());
 export function PolicyEditor({ action }: Any) {
   const [data, setData] = useState<Any>(null),
     [draft, setDraft] = useState<Any>(null),
@@ -46,11 +46,13 @@ export function PolicyEditor({ action }: Any) {
   if (!data)
     return (
       <div className="analytics-loading">
-        {error || (
-          <>
-            <LoaderCircle className="spin" />
-            Politika yükleniyor…
-          </>
+        {translateNode(
+          error || (
+            <>
+              <LoaderCircle className="spin" />
+              {t(" Politika y\u00FCkleniyor\u2026 ")}
+            </>
+          ),
         )}
       </div>
     );
@@ -76,32 +78,40 @@ export function PolicyEditor({ action }: Any) {
       <div className="notice">
         <ShieldCheck size={20} />
         <span>
-          Bu talimatları yalnız İK düzenler. Değişiklikler yeni işlere
-          uygulanır; başlamış işler, mevcut formlar ve geçmiş sonuçlar kendi
-          sürümünü korur. Veri erişimi, zorunlu JSON şeması ve İK inceleme
-          kuralları talimatlarla değiştirilemez.
+          {t(
+            " Bu talimatlar\u0131 yaln\u0131z \u0130K d\u00FCzenler. De\u011Fi\u015Fiklikler yeni i\u015Flere uygulan\u0131r; ba\u015Flam\u0131\u015F i\u015Fler, mevcut formlar ve ge\u00E7mi\u015F sonu\u00E7lar kendi s\u00FCr\u00FCm\u00FCn\u00FC korur. Veri eri\u015Fimi, zorunlu JSON \u015Femas\u0131 ve \u0130K inceleme kurallar\u0131 talimatlarla de\u011Fi\u015Ftirilemez. ",
+          )}
         </span>
       </div>
-      {error && (
-        <div className="notice error" role="alert">
-          {error}
-        </div>
+      {translateNode(
+        error && (
+          <div className="notice error" role="alert">
+            {translateNode(error)}
+          </div>
+        ),
       )}
       <section className="panel policy-toolbar">
         <div>
-          <b>Aktif politika · v{data.active.version}</b>
+          <b>
+            {t("Aktif politika \u00B7 v")}
+            {translateNode(data.active.version)}
+          </b>
           <small>
-            {when(data.active.created_at)} ·{" "}
-            {data.active.created_by === "system"
-              ? "Varsayılan kurum politikası"
-              : "İK tarafından kaydedildi"}
+            {translateNode(when(data.active.created_at))}
+            {t(" \u00B7")}
+            {translateNode(" ")}
+            {translateNode(
+              data.active.created_by === "system"
+                ? "Varsayılan kurum politikası"
+                : "İK tarafından kaydedildi",
+            )}
           </small>
         </div>
         <div className="policy-controls">
           <label>
             <History size={15} />
             <select
-              aria-label="Geçmiş politika sürümü"
+              aria-label={t("Ge\u00E7mi\u015F politika s\u00FCr\u00FCm\u00FC")}
               value={historical}
               onChange={async (e) => {
                 const id = e.target.value;
@@ -116,17 +126,26 @@ export function PolicyEditor({ action }: Any) {
                 }
               }}
             >
-              <option value="">Geçmiş sürümü taslağa al…</option>
-              {data.history.map((p: Any) => (
-                <option key={p.id} value={p.id}>
-                  v{p.version} · {when(p.created_at)}
-                </option>
-              ))}
+              <option value="">
+                {t(
+                  "Ge\u00E7mi\u015F s\u00FCr\u00FCm\u00FC tasla\u011Fa al\u2026",
+                )}
+              </option>
+              {translateNode(
+                data.history.map((p: Any) => (
+                  <option key={p.id} value={p.id}>
+                    {t(" v")}
+                    {translateNode(p.version)}
+                    {t(" \u00B7 ")}
+                    {translateNode(when(p.created_at))}
+                  </option>
+                )),
+              )}
             </select>
           </label>
           <Button secondary onClick={() => setDraft({ ...data.defaults })}>
             <RotateCcw size={15} />
-            Varsayılanları taslağa al
+            {t(" Varsay\u0131lanlar\u0131 tasla\u011Fa al ")}
           </Button>
         </div>
       </section>
@@ -150,57 +169,65 @@ export function PolicyEditor({ action }: Any) {
         }}
       >
         <div className="policy-fields">
-          {fields.map(([key, title, description]) => (
-            <section className="panel policy-field" key={key}>
-              <div className="panel-head">
-                <div>
-                  <h2>{title}</h2>
-                  <p>{description}</p>
+          {translateNode(
+            fields.map(([key, title, description]) => (
+              <section className="panel policy-field" key={key}>
+                <div className="panel-head">
+                  <div>
+                    <h2>{translateNode(title)}</h2>
+                    <p>{translateNode(description)}</p>
+                  </div>
+                  <FileText size={18} />
                 </div>
-                <FileText size={18} />
-              </div>
-              <label className="policy-instructions">
-                System instruction
-                <textarea
-                  aria-label={`${title} talimatı`}
-                  required
-                  minLength={30}
-                  maxLength={5000}
-                  value={draft[key]}
-                  onChange={(e) =>
-                    setDraft({ ...draft, [key]: e.target.value })
-                  }
-                />
-              </label>
-              <div className="policy-field-count">
-                {draft[key].length.toLocaleString("tr-TR")} / 5.000 karakter
-              </div>
-            </section>
-          ))}
+                <label className="policy-instructions">
+                  {t(" System instruction ")}
+                  <textarea
+                    aria-label={t(`${title} talimatı`)}
+                    required
+                    minLength={30}
+                    maxLength={5000}
+                    value={draft[key]}
+                    onChange={(e) =>
+                      setDraft({ ...draft, [key]: e.target.value })
+                    }
+                  />
+                </label>
+                <div className="policy-field-count">
+                  {translateNode(
+                    draft[key].length.toLocaleString(formatLocale()),
+                  )}
+                  {t(" / 5.000 karakter ")}
+                </div>
+              </section>
+            )),
+          )}
         </div>
         <div className="policy-save">
           <span>
-            {changed
-              ? "Kaydedilmemiş talimat değişiklikleri var."
-              : "Aktif sürümü görüntülüyorsunuz."}
+            {translateNode(
+              changed
+                ? "Kaydedilmemiş talimat değişiklikleri var."
+                : "Aktif sürümü görüntülüyorsunuz.",
+            )}
           </span>
           <Button secondary type="button" onClick={load} disabled={busy}>
-            Aktif sürümü yükle
+            {t(" Aktif s\u00FCr\u00FCm\u00FC y\u00FCkle ")}
           </Button>
           <Button disabled={!changed || busy}>
-            {busy ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <Check size={16} />
+            {translateNode(
+              busy ? (
+                <LoaderCircle className="spin" size={16} />
+              ) : (
+                <Check size={16} />
+              ),
             )}
-            Yeni sürüm olarak kaydet
+            {t(" Yeni s\u00FCr\u00FCm olarak kaydet ")}
           </Button>
         </div>
       </form>
     </div>
   );
 }
-
 export function QualityInbox({ boot, action }: Any) {
   const [data, setData] = useState<Any>(null),
     [status, setStatus] = useState("pending"),
@@ -249,11 +276,13 @@ export function QualityInbox({ boot, action }: Any) {
   if (!data || data._query !== query)
     return (
       <div className="analytics-loading">
-        {error || (
-          <>
-            <LoaderCircle className="spin" />
-            İK inceleme kuyruğu yükleniyor…
-          </>
+        {translateNode(
+          error || (
+            <>
+              <LoaderCircle className="spin" />
+              {t(" \u0130K inceleme kuyru\u011Fu y\u00FCkleniyor\u2026 ")}
+            </>
+          ),
         )}
       </div>
     );
@@ -262,156 +291,177 @@ export function QualityInbox({ boot, action }: Any) {
       <div className="notice">
         <ShieldCheck size={20} />
         <span>
-          Etiketler yanıt düzeyinde ön inceleme işaretidir; kişi hakkında bir
-          hüküm değildir. Kalite sorunu olan yanıt otomatik puanlanmaz. İK
-          gerekçeli puan kararı verene kadar ilgili değerlendirme yayımlanamaz.
+          {t(
+            " Etiketler yan\u0131t d\u00FCzeyinde \u00F6n inceleme i\u015Faretidir; ki\u015Fi hakk\u0131nda bir h\u00FCk\u00FCm de\u011Fildir. Kalite sorunu olan yan\u0131t otomatik puanlanmaz. \u0130K gerek\u00E7eli puan karar\u0131 verene kadar ilgili de\u011Ferlendirme yay\u0131mlanamaz. ",
+          )}
         </span>
       </div>
       <div className="metrics-grid quality-summary">
-        {[
-          ["İK incelemesi bekliyor", data.summary.pending],
-          ["Karar verildi", data.summary.resolved],
-          ["İncelenen yanıtların sahipleri", data.summary.people],
-        ].map(([name, value]) => (
-          <section className="metric-card" key={name}>
-            <div className="metric-top">
-              <span>{name}</span>
-            </div>
-            <strong>{value}</strong>
-          </section>
-        ))}
+        {translateNode(
+          [
+            ["İK incelemesi bekliyor", data.summary.pending],
+            ["Karar verildi", data.summary.resolved],
+            ["İncelenen yanıtların sahipleri", data.summary.people],
+          ].map(([name, value]) => (
+            <section className="metric-card" key={name}>
+              <div className="metric-top">
+                <span>{translateNode(name)}</span>
+              </div>
+              <strong>{translateNode(value)}</strong>
+            </section>
+          )),
+        )}
       </div>
       <section className="panel quality-panel">
         <div className="quality-filters">
           <label>
-            İnceleme durumu
+            {t(" \u0130nceleme durumu ")}
             <select
-              aria-label="Kalite inceleme durumu"
+              aria-label={t("Kalite inceleme durumu")}
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
                 setOffset(0);
               }}
             >
-              <option value="pending">İnceleme bekliyor</option>
-              <option value="resolved">Karar verildi</option>
-              <option value="all">Tümü</option>
+              <option value="pending">{t("\u0130nceleme bekliyor")}</option>
+              <option value="resolved">{t("Karar verildi")}</option>
+              <option value="all">{t("T\u00FCm\u00FC")}</option>
             </select>
           </label>
           <label>
-            Ekip
+            {t(" Ekip ")}
             <select
-              aria-label="Kalite ekip filtresi"
+              aria-label={t("Kalite ekip filtresi")}
               value={team}
               onChange={(e) => {
                 setTeam(e.target.value);
                 setOffset(0);
               }}
             >
-              <option value="">Tüm ekipler</option>
-              {boot.teams.map((t: Any) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
+              <option value="">{t("T\u00FCm ekipler")}</option>
+              {translateNode(
+                boot.teams.map((t: Any) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                )),
+              )}
             </select>
           </label>
           <label>
-            Ölçüm dönemi
+            {t(" \u00D6l\u00E7\u00FCm d\u00F6nemi ")}
             <select
-              aria-label="Kalite dönem filtresi"
+              aria-label={t("Kalite d\u00F6nem filtresi")}
               value={campaign}
               onChange={(e) => {
                 setCampaign(e.target.value);
                 setOffset(0);
               }}
             >
-              <option value="">Tüm dönemler</option>
-              {boot.campaigns.map((c: Any) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+              <option value="">{t("T\u00FCm d\u00F6nemler")}</option>
+              {translateNode(
+                boot.campaigns.map((c: Any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                )),
+              )}
             </select>
           </label>
           <Button secondary onClick={load}>
-            Yenile
+            {t(" Yenile ")}
           </Button>
         </div>
-        {error && (
-          <div className="notice error" role="alert">
-            {error}
-          </div>
+        {translateNode(
+          error && (
+            <div className="notice error" role="alert">
+              {translateNode(error)}
+            </div>
+          ),
         )}
         <div className="analytics-table-scroll">
           <table>
             <thead>
               <tr>
-                <th>Çalışan / ekip</th>
-                <th>Etiket</th>
-                <th>Soru / dönem</th>
-                <th>Durum</th>
+                <th>{t("\u00C7al\u0131\u015Fan / ekip")}</th>
+                <th>{t("Etiket")}</th>
+                <th>{t("Soru / d\u00F6nem")}</th>
+                <th>{t("Durum")}</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {data.items.map((item: Any) => (
-                <tr key={item.id}>
-                  <td>
-                    <b>{item.name}</b>
-                    <small className="analytics-cell-note">
-                      {item.team_name}
-                    </small>
-                  </td>
-                  <td>
-                    {qualityLabels[item.category] || item.category}
-                    <small className="analytics-cell-note">
-                      {when(item.created_at)}
-                    </small>
-                  </td>
-                  <td className="quality-question">
-                    {item.question}
-                    <small className="analytics-cell-note">
-                      {item.campaign_name}
-                    </small>
-                  </td>
-                  <td>
-                    {item.review_status === "pending"
-                      ? "İK incelemesi bekliyor"
-                      : "Karar verildi"}
-                  </td>
-                  <td>
-                    <button
-                      className="text-btn"
-                      onClick={async () => {
-                        try {
-                          setDetail(await api(`/quality-cases/${item.id}`));
-                          setScore("");
-                          setReason("");
-                        } catch (e: Any) {
-                          setError(e.message);
-                        }
-                      }}
-                    >
-                      İncele
-                      <ArrowUpRight size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {translateNode(
+                data.items.map((item: Any) => (
+                  <tr key={item.id}>
+                    <td>
+                      <b>{item.name}</b>
+                      <small className="analytics-cell-note">
+                        {translateNode(item.team_name)}
+                      </small>
+                    </td>
+                    <td>
+                      {translateNode(
+                        qualityLabels[item.category] || item.category,
+                      )}
+                      <small className="analytics-cell-note">
+                        {translateNode(when(item.created_at))}
+                      </small>
+                    </td>
+                    <td className="quality-question">
+                      {translateNode(item.question)}
+                      <small className="analytics-cell-note">
+                        {translateNode(item.campaign_name)}
+                      </small>
+                    </td>
+                    <td>
+                      {translateNode(
+                        item.review_status === "pending"
+                          ? "İK incelemesi bekliyor"
+                          : "Karar verildi",
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        className="text-btn"
+                        onClick={async () => {
+                          try {
+                            setDetail(await api(`/quality-cases/${item.id}`));
+                            setScore("");
+                            setReason("");
+                          } catch (e: Any) {
+                            setError(e.message);
+                          }
+                        }}
+                      >
+                        {t(" \u0130ncele ")}
+                        <ArrowUpRight size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                )),
+              )}
             </tbody>
           </table>
         </div>
-        {!data.items.length && (
-          <div className="analytics-empty">
-            Seçili kapsamda yanıt kalitesi inceleme kaydı yok.
-          </div>
+        {translateNode(
+          !data.items.length && (
+            <div className="analytics-empty">
+              {t(
+                " Se\u00E7ili kapsamda yan\u0131t kalitesi inceleme kayd\u0131 yok. ",
+              )}
+            </div>
+          ),
         )}
         <div className="analytics-pagination">
-          <span>{data.total} kayıt</span>
+          <span>
+            {translateNode(data.total)}
+            {t(" kay\u0131t")}
+          </span>
           <button
             className="icon-btn"
-            aria-label="Önceki kalite sayfası"
+            aria-label={t("\u00D6nceki kalite sayfas\u0131")}
             disabled={!offset}
             onClick={() => setOffset((n) => Math.max(0, n - 25))}
           >
@@ -419,7 +469,7 @@ export function QualityInbox({ boot, action }: Any) {
           </button>
           <button
             className="icon-btn"
-            aria-label="Sonraki kalite sayfası"
+            aria-label={t("Sonraki kalite sayfas\u0131")}
             disabled={offset + 25 >= data.total}
             onClick={() => setOffset((n) => n + 25)}
           >
@@ -427,125 +477,163 @@ export function QualityInbox({ boot, action }: Any) {
           </button>
         </div>
       </section>
-      {detail && (
-        <Modal
-          title="İK yanıt kalitesi incelemesi"
-          onClose={() => setDetail(null)}
-        >
-          <div className="modal-body quality-review">
-            <p className="muted">
-              {detail.name} · {detail.team_name} · {detail.campaign_name}
-            </p>
-            <h3>{detail.question}</h3>
-            <blockquote>{detail.answer}</blockquote>
-            <div className="notice">
-              <span>
-                <b>{qualityLabels[detail.category] || detail.category}</b>
-                <br />
-                {detail.reason}
-              </span>
-            </div>
-            <p className="muted">
-              Kontrol türü:{" "}
-              {detail.source === "rule"
-                ? "Temel içerik kuralı"
-                : detail.source === "mock"
-                  ? "Demo model incelemesi"
-                  : "LLM incelemesi"}{" "}
-              · {detail.pass_no}. değerlendirme geçişi
-            </p>
-            {detail.evidence_quotes?.length > 0 && (
-              <div>
-                <h3>Yanıttan işaretlenen alıntılar</h3>
-                {detail.evidence_quotes.map((q: string, i: number) => (
-                  <blockquote key={i}>{q}</blockquote>
-                ))}
-              </div>
-            )}
-            {detail.self_review && (
-              <div className="notice">
-                Kendi yanıtınız için puan kararı veremezsiniz. Başka bir İK
-                yetkilisi incelemeli.
-              </div>
-            )}
-            {detail.decision && (
-              <section className="notice">
-                <span>
-                  <b>İK puan kararı: {detail.decision.score} / 100</b>
-                  <br />
-                  {detail.decision.reason}
-                  <br />
-                  {when(detail.decision.created_at)}
-                </span>
-              </section>
-            )}
-            {detail.can_review ? (
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setBusy(true);
-                  try {
-                    const result = await action(
-                      () =>
-                        api(
-                          `/reviews/${detail.evaluation_id}/decision`,
-                          "POST",
-                          { score: Number(score), reason },
-                        ),
-                      "İK kalite incelemesi kaydedildi.",
-                    );
-                    if (result) {
-                      setDetail(null);
-                      await load();
-                    }
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <label>
-                  İK puan kararı (0–100)
-                  <input
-                    aria-label="İK kalite puanı"
-                    required
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.1"
-                    value={score}
-                    onChange={(e) => setScore(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Kararın gerekçesi
-                  <textarea
-                    aria-label="İK kalite karar gerekçesi"
-                    required
-                    minLength={5}
-                    maxLength={2000}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                  />
-                </label>
-                <Button
-                  disabled={busy || score === "" || reason.trim().length < 5}
-                >
-                  {busy ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : (
-                    <Check size={16} />
-                  )}
-                  İK kararını kaydet
-                </Button>
-              </form>
-            ) : (
+      {translateNode(
+        detail && (
+          <Modal
+            title={t("\u0130K yan\u0131t kalitesi incelemesi")}
+            onClose={() => setDetail(null)}
+          >
+            <div className="modal-body quality-review">
               <p className="muted">
-                Bu kayıt için yeni karar verilemiyor. Geçmiş kararlar
-                değerlendirme kaydında saklanır.
+                {detail.name}
+                {t(" \u00B7 ")}
+                {translateNode(detail.team_name)}
+                {t(" \u00B7 ")}
+                {translateNode(detail.campaign_name)}
               </p>
-            )}
-          </div>
-        </Modal>
+              <h3>{translateNode(detail.question)}</h3>
+              <blockquote>{detail.answer}</blockquote>
+              <div className="notice">
+                <span>
+                  <b>
+                    {translateNode(
+                      qualityLabels[detail.category] || detail.category,
+                    )}
+                  </b>
+                  <br />
+                  {detail.reason}
+                </span>
+              </div>
+              <p className="muted">
+                {t(" Kontrol t\u00FCr\u00FC:")}
+                {translateNode(" ")}
+                {translateNode(
+                  detail.source === "rule"
+                    ? "Temel içerik kuralı"
+                    : detail.source === "mock"
+                      ? "Demo model incelemesi"
+                      : "LLM incelemesi",
+                )}
+                {translateNode(" ")}
+                {t(" \u00B7 ")}
+                {translateNode(detail.pass_no)}
+                {t(". de\u011Ferlendirme ge\u00E7i\u015Fi ")}
+              </p>
+              {translateNode(
+                detail.evidence_quotes?.length > 0 && (
+                  <div>
+                    <h3>
+                      {t("Yan\u0131ttan i\u015Faretlenen al\u0131nt\u0131lar")}
+                    </h3>
+                    {translateNode(
+                      detail.evidence_quotes.map((q: string, i: number) => (
+                        <blockquote key={i}>{translateNode(q)}</blockquote>
+                      )),
+                    )}
+                  </div>
+                ),
+              )}
+              {translateNode(
+                detail.self_review && (
+                  <div className="notice">
+                    {t(
+                      " Kendi yan\u0131t\u0131n\u0131z i\u00E7in puan karar\u0131 veremezsiniz. Ba\u015Fka bir \u0130K yetkilisi incelemeli. ",
+                    )}
+                  </div>
+                ),
+              )}
+              {translateNode(
+                detail.decision && (
+                  <section className="notice">
+                    <span>
+                      <b>
+                        {t("\u0130K puan karar\u0131: ")}
+                        {translateNode(detail.decision.score)}
+                        {t(" / 100")}
+                      </b>
+                      <br />
+                      {detail.decision.reason}
+                      <br />
+                      {translateNode(when(detail.decision.created_at))}
+                    </span>
+                  </section>
+                ),
+              )}
+              {translateNode(
+                detail.can_review ? (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setBusy(true);
+                      try {
+                        const result = await action(
+                          () =>
+                            api(
+                              `/reviews/${detail.evaluation_id}/decision`,
+                              "POST",
+                              { score: Number(score), reason },
+                            ),
+                          "İK kalite incelemesi kaydedildi.",
+                        );
+                        if (result) {
+                          setDetail(null);
+                          await load();
+                        }
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <label>
+                      {t(" \u0130K puan karar\u0131 (0\u2013100) ")}
+                      <input
+                        aria-label={t("\u0130K kalite puan\u0131")}
+                        required
+                        type="number"
+                        min={0}
+                        max={100}
+                        step="0.1"
+                        value={score}
+                        onChange={(e) => setScore(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      {t(" Karar\u0131n gerek\u00E7esi ")}
+                      <textarea
+                        aria-label={t("\u0130K kalite karar gerek\u00E7esi")}
+                        required
+                        minLength={5}
+                        maxLength={2000}
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                      />
+                    </label>
+                    <Button
+                      disabled={
+                        busy || score === "" || reason.trim().length < 5
+                      }
+                    >
+                      {translateNode(
+                        busy ? (
+                          <LoaderCircle className="spin" size={16} />
+                        ) : (
+                          <Check size={16} />
+                        ),
+                      )}
+                      {t(" \u0130K karar\u0131n\u0131 kaydet ")}
+                    </Button>
+                  </form>
+                ) : (
+                  <p className="muted">
+                    {t(
+                      " Bu kay\u0131t i\u00E7in yeni karar verilemiyor. Ge\u00E7mi\u015F kararlar de\u011Ferlendirme kayd\u0131nda saklan\u0131r. ",
+                    )}
+                  </p>
+                ),
+              )}
+            </div>
+          </Modal>
+        ),
       )}
     </>
   );

@@ -38,6 +38,9 @@ def explicit_no_experience(text):
         "deneyimim bulunmuyor",
         "i don't know",
         "no experience",
+        "i have no experience",
+        "i have no experience yet",
+        "i do not know",
     }
 
 
@@ -55,7 +58,7 @@ def local_quality(text):
     return None
 
 
-def assess_quality(text, grade, simulated=False):
+def assess_quality(text, grade, simulated=False, language="tr"):
     local = local_quality(text)
     if local == "no_experience":
         return None
@@ -71,7 +74,11 @@ def assess_quality(text, grade, simulated=False):
     return {
         "category": category,
         "reason": (
-            "Tekrarlı veya anlamlı sözcük içermeyen yanıt örüntüsü; İK doğrulaması gerekir."
+            (
+                "Repeated or non-meaningful response pattern; HR verification is required."
+                if language == "en"
+                else "Tekrarlı veya anlamlı sözcük içermeyen yanıt örüntüsü; İK doğrulaması gerekir."
+            )
             if local
             else quality.reason
         ),

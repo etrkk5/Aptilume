@@ -1,10 +1,14 @@
 {
-  "brand": "Yapı Kredi",
-  "variant": "official bank website logo",
-  "source_page": "https://www.yapikredi.com.tr/",
-  "asset_url": "https://assets.yapikredi.com.tr/WebSite/_assets/img/Yapikredi_logo.svg?v6",
-  "asset_file": "web/public/brand/yapi-kredi-logo.svg",
-  "sha256": "2210b6e02f973fe3ca025793ddb4a343592f2a8600ab0ed368e4c28f7e85f14d",
-  "retrieved_at": "2026-11-04",
-  "modified": false
+  "brand": "Aptilume",
+  "variant": "original folded-light A monogram",
+  "asset_file": "web/public/brand/aptilume-mark.svg",
+  "sha256": "a48bb08156130eec1495d46eea9014e3259641053b6bb9029eb6ba583c80bcc2",
+  "created_at": "2026-11-05",
+  "medium": "editable SVG",
+  "palette": [
+    "#2B78E4",
+    "#75BAFF",
+    "#9AF4F0",
+    "#30B8E2"
+  ]
 }

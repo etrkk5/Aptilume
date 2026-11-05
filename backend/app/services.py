@@ -152,7 +152,9 @@ def seed_roles(store):
                     )
 
 
-def create_campaign(store, name, team_ids=None, participant_ids=None):
+def create_campaign(store, name, team_ids=None, participant_ids=None, language="en"):
+    if language not in {"en", "tr"}:
+        raise DomainError("invalid_language", "Language must be en or tr.")
     with store.session() as s:
         teams = (
             list(s.scalars(select(Team).where(Team.id.in_(team_ids))))
@@ -162,6 +164,7 @@ def create_campaign(store, name, team_ids=None, participant_ids=None):
         if not teams:
             raise DomainError("missing_teams", "Önce en az bir ekip oluşturun.")
         cfg = {
+            "language": language,
             "team_snapshots": {
                 t.id: {
                     "id": t.id,
@@ -267,7 +270,11 @@ def enqueue_generation(store, campaign_id):
         return asdict(job)
 
 
-def example_questions(skills, team):
+def example_questions(skills, team, language="tr"):
+    if language == "en":
+        from .language import english_examples
+
+        return english_examples(skills, team)
     result = []
     for idx, skill in enumerate(skills):
         common = skill["id"] in COMMON
@@ -433,10 +440,12 @@ def generate_questions(store, job):
                 "invalid_targets", "Bu blueprint için üç rol yetkinliği seçin."
             )
         skills = [catalog[x] for x in COMMON + role]
-        examples = example_questions(skills, team)
+        language = cfg.get("language", "tr")
+        examples = example_questions(skills, team, language)
         value, _ = provider.complete(
             "questions",
             {
+                "language": language,
                 "skills": skills,
                 "team_context": team,
                 "blueprint": {
