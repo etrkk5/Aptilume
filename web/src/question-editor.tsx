@@ -244,7 +244,7 @@ export function QuestionSetEditor({ campaignId, action, onClose }: Any) {
         ) : !data ? (
           <p role="status">Soru seti yükleniyor…</p>
         ) : draft ? (
-          <form onSubmit={save}>
+          <form id="question-draft-form" onSubmit={save}>
             <button
               className="text-btn"
               type="button"
@@ -596,22 +596,6 @@ export function QuestionSetEditor({ campaignId, action, onClose }: Any) {
                 </section>
               )}
             </fieldset>
-            <div className="modal-actions">
-              <Button
-                type="button"
-                secondary
-                disabled={saving}
-                onClick={() => {
-                  setDraft(null);
-                  setError("");
-                }}
-              >
-                Değişiklikleri bırak
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? "Kaydediliyor…" : "Soruyu kaydet"}
-              </Button>
-            </div>
           </form>
         ) : (
           <>
@@ -783,58 +767,75 @@ export function QuestionSetEditor({ campaignId, action, onClose }: Any) {
                 </article>
               ))}
             </div>
-            {data.can_edit && (
-              <div className="question-publish-actions">
-                {publish ? (
-                  <>
-                    <p>
-                      Güncel soru setini İK adına onaylayıp çalışanlara
-                      yayınlayacaksınız. Yayından sonra soru içeriği
-                      değiştirilemez.
-                    </p>
-                    <div className="modal-actions">
-                      <Button
-                        secondary
-                        disabled={saving}
-                        onClick={() => setPublish(false)}
-                      >
-                        Vazgeç
-                      </Button>
-                      <Button disabled={saving} onClick={() => approve(true)}>
-                        <Send size={16} />
-                        Onayla ve anketi yayınla
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <span className="muted">
-                      Kayıtlar taslaktır. Onay ve yayın ayrı işlemlerdir.
-                    </span>
-                    <div className="catalog-buttons">
-                      <Button
-                        secondary
-                        disabled={saving || !!issues.length}
-                        onClick={() => approve(false)}
-                      >
-                        <Check size={16} />
-                        Seti onayla
-                      </Button>
-                      <Button
-                        disabled={saving || !!issues.length}
-                        onClick={() => setPublish(true)}
-                      >
-                        <Send size={16} />
-                        Onayla ve yayınla
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </>
         )}
       </div>
+      {data?.can_edit && !draft && !leave && (
+        <div className="question-publish-actions">
+          {publish ? (
+            <>
+              <p>
+                Güncel soru setini İK adına onaylayıp çalışanlara
+                yayınlayacaksınız. Yayından sonra soru içeriği değiştirilemez.
+              </p>
+              <div className="modal-actions">
+                <Button
+                  secondary
+                  disabled={saving}
+                  onClick={() => setPublish(false)}
+                >
+                  Vazgeç
+                </Button>
+                <Button disabled={saving} onClick={() => approve(true)}>
+                  <Send size={16} />
+                  Onayla ve anketi yayınla
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="muted">
+                Kayıtlar taslaktır. Onay ve yayın ayrı işlemlerdir.
+              </span>
+              <div className="catalog-buttons">
+                <Button
+                  secondary
+                  disabled={saving || !!issues.length}
+                  onClick={() => approve(false)}
+                >
+                  <Check size={16} />
+                  Seti onayla
+                </Button>
+                <Button
+                  disabled={saving || !!issues.length}
+                  onClick={() => setPublish(true)}
+                >
+                  <Send size={16} />
+                  Onayla ve yayınla
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {draft && !leave && (
+        <div className="question-publish-actions">
+          <Button
+            type="button"
+            secondary
+            disabled={saving}
+            onClick={() => {
+              setDraft(null);
+              setError("");
+            }}
+          >
+            Değişiklikleri bırak
+          </Button>
+          <Button form="question-draft-form" type="submit" disabled={saving}>
+            {saving ? "Kaydediliyor…" : "Soruyu kaydet"}
+          </Button>
+        </div>
+      )}
     </Modal>
   );
 }

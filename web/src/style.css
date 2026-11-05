@@ -3589,3 +3589,14 @@ textarea {
     width: 100%;
   }
 }
+.modal-wide > .modal-head {
+  flex-shrink: 0;
+}
+.modal-wide > .modal-body {
+  min-height: 0;
+}
+.modal-wide > .question-publish-actions {
+  flex-shrink: 0;
+  padding: 18px 27px;
+  background: var(--surface, #fff);
+}
