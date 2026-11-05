@@ -12,7 +12,7 @@
 
 ## Tarayıcı doğrulaması
 
-Codex in-app browser üzerinde, ayrı geçici test deposunda 118 geometri ölçümü yapıldı; hata bulunan durumlar düzeltmelerden sonra tekrarlandı. Gerçek sunum kayıtları test verileriyle değiştirilmedi.
+Codex in-app browser üzerinde normal demo verileri ve ayrı geçici test deposuyla 118 geometri ölçümü yapıldı; hata bulunan durumlar düzeltmelerden sonra tekrarlandı. Son 0.6.1 sunumunda beş viewport daha kontrol edildi: 320/375/768/1280/1440 px genişliklerin tamamında sayfa ve modal iç genişliği sınırlar içinde, ekran dışındaki kontrol sayısı sıfırdı. Gerçek sunum kayıtları test verileriyle değiştirilmedi.
 
 Ölçüler: 320×568, 375×812, 640×360, 768×900/1024, 1280×600 ve 1440×900. Bu ölçüler tarayıcı viewport'udur; belirli bir fiziksel telefon veya tüm tarayıcılar için test iddiası değildir.
 
@@ -25,3 +25,7 @@ Kontrol edilen alanlar:
 Son kontrollerde sayfanın yatay genişliği viewport'u aşmadı; soru editörünün iç alanında yatay kayma, ekran dışına çıkan alan/düğme veya yatay kesilen başlık/metin bulunmadı. Pencere, kapatma ve alt işlem düğmeleri ekran içinde kaldı; kısa ekranda içerik dikey kaydırılarak okunur. Geniş tablolar kendi kutularında yatay kaydırılır; bu sayfa taşması sayılmaz ve korunmuştur.
 
 Bu sürüm CSS yerleşimi ve sürüm/paket belgelerini değiştirir. İş akışı, JavaScript bağımlılıkları, yetkiler, puanlama, veri şeması ve LLM davranışı değiştirilmez. TypeScript/Vite production build başarılıdır; mevcut CI regresyonları ayrıca çalıştırır.
+
+## Local / OpenShift arayüz eşitliği
+
+0.6.1 Python ZIP paketindeki yedi `web/dist` dosyasının SHA-256 değerleri hem linux/amd64 hem linux/arm64 Docker image içindeki dosyalarla birebir karşılaştırıldı ve eşleşti. JavaScript/React kodu aynı kalır; Node.js yalnız build ortamında kullanılır. Demo/production kimlik, bağlantı ve veri ayarları mevcut parametrelerden seçilir.
