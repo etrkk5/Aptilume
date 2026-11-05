@@ -2,7 +2,7 @@
 
 Bu paket derlenmiş web arayüzünü içerir. Çalıştırılan süreçler Python API ve worker'dır. Node.js, npm, pnpm, Docker ve ayrı bir veritabanı kurulumu gerekmez. Tarayıcı hazır JavaScript/CSS dosyalarını Python sunucusundan alır. Python 3.12 önerilir. Demo sentetik veriler ve mock LLM kullanır.
 
-Hazır ZIP repodaki [packages/Aptilume-0.6.0-Python.zip](../packages/Aptilume-0.6.0-Python.zip) dosyasıdır. `git pull` ile alın veya GitHub'da dosyayı açıp indirin. ZIP'i tamamen çıkarın ve aşağıdaki işlemleri çıkarılan `Aptilume-0.6.0-Python` klasöründe yapın.
+Hazır ZIP repodaki [packages/Aptilume-0.6.1-Python.zip](../packages/Aptilume-0.6.1-Python.zip) dosyasıdır. `git pull` ile alın veya GitHub'da dosyayı açıp indirin. ZIP'i tamamen çıkarın ve aşağıdaki işlemleri çıkarılan `Aptilume-0.6.1-Python` klasöründe yapın.
 
 ## Windows / PowerShell
 
@@ -76,14 +76,14 @@ python3.12 -m venv .venv
 Paketin Git kaynakları tek başına hazır arayüzü içermez; `web/dist` Git'te tutulmaz. Python paket ZIP'i kullanın. Yeni sürümün arayüzü Node.js'e izin verilen build ortamında derlenir, ardından şu komutla paketlenir:
 
 ```bash
-python scripts/package_python.py --output work/Aptilume-0.6.0-Python.zip
+python scripts/package_python.py --output work/Aptilume-0.6.1-Python.zip
 ```
 
 ZIP yalnız uygulama kaynakları, kaynak katalog/talimatlar ve hazır arayüzü içerir; kişisel demo verileri, parolalar, `.env`, sanal ortam ve Node.js runtime'ı dahil edilmez. `PACKAGE.json` kaynak commit ve dosya SHA-256 değerlerini içerir.
 
 Bu başlatıcı yerel demo içindir. OpenShift'teki gerçek production çalıştırması mevcut Dockerfile ve `python -m app.cli api` / `worker` komutlarını, kurumsal Secret/AD/LLM/DB ayarlarını kullanır. `local_demo.py` production başlatıcısı değildir.
 
-## 0.5.0 kurulumunu 0.6.0'a güncelleme
+## Önceki kurulumu 0.6.1'e güncelleme
 
 API ve worker'ı Ctrl+C ile durdurun. Mevcut klasörün tamamını, özellikle `runtime` ve `.venv` klasörlerini yedekleyip koruyun. Yeni ZIP'in içindeki uygulama dosyalarını mevcut kurulum klasörüne kopyalayarak güncelleyin; mevcut veri klasörünü başka bir konuma taşımayın. Aynı klasörde `local_demo.py api` ve `local_demo.py worker` komutlarını tekrar başlatın. Tarayıcıyı yenileyin. Mevcut demo hesabı, şifreler ve dönemler korunur; bu sürüm için yeni şema migration'ı yoktur. Yeni klasörde sıfır kurulum tercih ederseniz yeni, bağımsız demo hesapları/verileri oluşur.
 

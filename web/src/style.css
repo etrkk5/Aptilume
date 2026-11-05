@@ -21,6 +21,7 @@
 }
 body {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 button,
 input,
@@ -1120,7 +1121,7 @@ textarea {
 }
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 17px;
 }
 .modal-actions {
@@ -1483,7 +1484,7 @@ textarea {
 }
 .survey-layout {
   display: grid;
-  grid-template-columns: 245px 1fr;
+  grid-template-columns: 245px minmax(0, 1fr);
   gap: 23px;
 }
 .survey-side {
@@ -3469,6 +3470,7 @@ textarea {
 }
 .question-set-editor {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 .question-set-editor form {
@@ -3599,4 +3601,86 @@ textarea {
   flex-shrink: 0;
   padding: 18px 27px;
   background: var(--surface, #fff);
+}
+
+/* Intrinsic form/text widths must never widen a panel or its scroll area. */
+.main-shell,
+main,
+main > *,
+.panel,
+.campaign-main,
+.campaign-title,
+.page-heading > div,
+.modal,
+.modal-body,
+.modal-body > *,
+.question-set-editor form,
+.question-set-editor .section-toolbar > *,
+.question-set-summary > *,
+.question-card-heading > * {
+  min-width: 0;
+}
+input,
+textarea,
+select {
+  min-width: 0;
+  max-width: 100%;
+}
+fieldset {
+  min-inline-size: 0;
+}
+.modal-head {
+  gap: 16px;
+}
+.modal-head h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.modal-head > .icon-btn {
+  flex-shrink: 0;
+}
+.question-set-editor .section-toolbar > label {
+  flex: 1 1 240px;
+  max-width: 100%;
+}
+.question-set-editor select {
+  width: 100%;
+}
+.question-review .question-editor-card {
+  border-color: var(--border);
+  padding: 18px;
+}
+@media (max-width: 650px) {
+  .question-set-editor .section-toolbar > label {
+    flex-basis: 100%;
+  }
+}
+.question-card-heading > .eyebrow,
+.question-set-summary > div {
+  flex: 1;
+}
+.question-card-heading > .catalog-buttons,
+.question-set-summary > .small-pill {
+  flex-shrink: 0;
+}
+.toolbar > *,
+.filter-field {
+  min-width: 0;
+  max-width: 100%;
+}
+.filter-field > svg {
+  flex-shrink: 0;
+}
+.filter-field select {
+  flex: 1;
+  min-width: 0;
+}
+.survey-layout > * {
+  min-width: 0;
+}
+.survey-title .small-pill,
+.skill-tag {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

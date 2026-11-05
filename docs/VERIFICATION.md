@@ -1,3 +1,14 @@
+# Aptilume 0.6.1 — taşma kontrolü
+
+5 Kasım 2026. [Yerleşim bulguları ve kontrol kapsamı](LAYOUT_0_6_1.md).
+
+- Dar ekran soru editörü grup seçimi, kesintisiz uzun metinler, 320 px rapor/anket filtreleri ve çalışan formundaki uzun dönem etiketi düzeltildi.
+- Açık/koyu tema; 320/375/640/768/1280/1440 px viewport; tüm ana ekranlar, üç soru türü, katalog/ekip pencereleri ve yayın onayı kontrol edildi. Ayrı geçici depoda 118 ölçüm; bulunan hatalar sonrası tekrar kontrol yapıldı. Normal sunum verileri korunur.
+- CSS ve paket sürümü dışında iş mantığı/bağımlılık/şema değişmedi. Production web build başarılı. Yeni düşük etkili CSS değişikliklerini aynalayan test eklenmedi; gerçek tarayıcı geometri ve görsel kontrolleri kullanıldı. Mevcut CI tam regresyon/güvenlik kontrollerini sürdürür.
+- Python ve Docker arayüz dosyaları paketleme sırasında karşılaştırılır. Node.js şirket bilgisayarında gerekli değildir; JS/React mimarisi korunur.
+
+---
+
 # Aptilume 0.6.0 — İK soru editörü doğrulaması
 
 5 Kasım 2026. [İş akışı ve yükseltme](FEATURES_0_6.md).

@@ -8,7 +8,7 @@ Kurum içi AI yetkinliklerini ekip bağlamı ve rol hedefleriyle ölçen web uyg
 
 Gereksinimler: Python 3.12+, Node 22+, pnpm 11.25 veya Docker.
 
-Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.6.0-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
+Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.6.1-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
 
 ```bash
 python3 -m venv .venv
@@ -34,7 +34,7 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.6.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.6.1 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -176,3 +176,5 @@ Yazılı puan, MCQ ve öz beyan ayrı göstergelerdir. Teknik hata sıfır puan 
 İK **Yetkinlik kataloğu** ekranından yetkinlik ekleyebilir, tanımı/sorumluları/L1–L5 seviyelerini düzenleyebilir, silebilir ve arşivden geri yükleyebilir. Geçmiş ölçümler kendi katalog sürümünü korur. [0.5.0 katalog rehberi](docs/FEATURES_0_5.md).
 
 0.6.0: AI soru üretimi sonrasında İK **Soruları düzenle ve yayınla** ekranından soru ekleyebilir, kopyalayabilir, düzeltebilir, silebilir ve taslak kaydedebilir. Onay/yayın yalnız İK'ya açıktır; yayın öncesi kapsam kontrol edilir, yayın sonrası içerik sabitlenir. Soru sayısı ve rapor paydaları atanmış sete göre değişir. [İK soru editörü rehberi](docs/FEATURES_0_6.md).
+
+0.6.1: dar ekranlarda soru editörü ve rapor/anket filtrelerinin genişliği düzeltildi. Uzun başlık, yetkinlik, soru ve referans metinleri satıra bölünür; çalışan formu ekranı genişletmez. [Yerleşim kontrolü](docs/LAYOUT_0_6_1.md).

@@ -1,7 +1,7 @@
 name: aptilume
 services:
   init:
-    image: aptilume:0.6.0
+    image: aptilume:0.6.1
     build: .
     command: ["bootstrap"]
     environment: &env
@@ -18,7 +18,7 @@ services:
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
     volumes: ["aptilume-data:/app/data"]
   api:
-    image: aptilume:0.6.0
+    image: aptilume:0.6.1
     command: ["api"]
     depends_on:
       init: {condition: service_completed_successfully}
@@ -30,7 +30,7 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
   worker:
-    image: aptilume:0.6.0
+    image: aptilume:0.6.1
     command: ["worker"]
     healthcheck:
       disable: true

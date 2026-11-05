@@ -82,7 +82,7 @@ def create_app(settings=None, store=None, auth_service=None):
 
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.6.0",
+        version="0.6.1",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
