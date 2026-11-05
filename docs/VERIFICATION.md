@@ -1,3 +1,18 @@
+# Aptilume 0.6.0 — İK soru editörü doğrulaması
+
+5 Kasım 2026. [İş akışı ve yükseltme](FEATURES_0_6.md).
+
+- **209 Python testi geçti** (3 mevcut bağımlılık deprecation uyarısı). Yeni 18 regresyon; İK ekleme/düzeltme/silme/kayıt, yetkisiz üç rol reddi, başka dönem ID'si, kapsam ve seçenek/rubrik doğrulaması, eksik taslakta yayın engeli, eski sürüm/iki İK/düzenleme-yayın çakışması, onay iptali, yayın sonrası değişmezlik ve yazımda LLM çağrısı olmaması.
+- Ortak ek soru iki rolün tüm çalışanlarına aynı kayıt olarak atandı. 22/23 soruluk formlar, bir/üç açık uçlu soru için gerçek payda, tam yanıt kapsamı ve tek soruda seviye üretilmemesi doğrulandı. Yayın onay aktörü/sürümü ve içerik hash izi saklandı.
+- PostgreSQL 16: CRUD-only runtime hesabında soru ekleme/düzenleme/silme, sürüm çatışması, İK onay/yayın, yayın sonrası ret ve üç yazılı soruya dayalı rapor geçti. Önceki katalog/politika/kalite/Excel kontrolleri de geçti. İzole fixture kurum TLS/CA kabulü değildir.
+- Tarayıcı ayrı test alanında AI sorusu/rubrik düzeltmesi ve kalıcı kayıt, yeni soru ve 23 soru sayacı, silme onayı, İK onayı, onay sonrası değişiklikle tekrar inceleme ve son yayın adımları doğrulandı. Gerçek silme ve veri bütünlüğü API regresyonlarında doğrulandı.
+- TypeScript/Vite production build ve Black başarılı. Soru editörü ayrı ve ihtiyaç halinde yüklenen küçük bundle'dır; ana bundle 500 kB uyarı eşiğinin altında. Bandit orta/yüksek eşikte 0 sonuç. Runtime bağımlılıkları değişmedi.
+- `aptilume:0.6.0`, linux/amd64 + linux/arm64 üretildi; mevcut yerel hesaplar, yayımlanmış dönemler ve talimatlar korunur. Ek migration yoktur. Hazır Python paketi ayrıca güncellenir.
+
+Gerçek AD/LLM/CA, kurum ölçüm kalibrasyonu, MFA, OpenShift ve sızma/yük kabulü koşulları sürer. Önceki kayıtlar aşağıda korunur.
+
+---
+
 # Aptilume 0.5.0 — Python ile yerel çalıştırma paketi
 
 5 Kasım 2026. Node.js ve Docker kullanılamayan bilgisayarlar için hazır browser arayüzü + Python API/worker paketi. [Kurulum rehberi](LOCAL_PYTHON.md).

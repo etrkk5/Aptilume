@@ -383,8 +383,100 @@ def main():
                 ).status_code
                 == 200
             )
+            # HR question drafting and publication, with the CRUD-only PG role.
+            editable_id = create_campaign(
+                limited, "PG editable question set", ["team-data"]
+            )["id"]
+            enqueue_generation(limited, editable_id)
+            Worker(limited).drain()
+            prefix = f"/api/v1/campaigns/{editable_id}"
+            editor = c.get(prefix + "/question-set").json()
+            question = next(
+                q
+                for q in editor["questions"]
+                if q["type"] == "open_text" and q["form_key"] == "common"
+            )
+            body = {
+                k: question[k]
+                for k in (
+                    "form_key",
+                    "skill_id",
+                    "type",
+                    "prompt",
+                    "options",
+                    "rubric",
+                    "reference",
+                    "evidence_type",
+                )
+            }
+            response = c.patch(
+                prefix + "/questions/" + question["id"],
+                json={
+                    **body,
+                    "prompt": "PG HR question correction",
+                    "expected_version": editor["version"],
+                },
+            )
+            assert response.status_code == 200, response.text
+            editor = response.json()
+            stale = editor["version"]
+            response = c.post(
+                prefix + "/questions",
+                json={
+                    **body,
+                    "prompt": "PG extra common question",
+                    "expected_version": stale,
+                },
+            )
+            assert response.status_code == 201, response.text
+            editor = response.json()
+            assert (
+                c.patch(
+                    prefix + "/questions/" + question["id"],
+                    json={**body, "expected_version": stale},
+                ).status_code
+                == 409
+            )
+            mcq = next(q for q in editor["questions"] if q["type"] == "single_choice")
+            response = c.delete(
+                prefix + "/questions/" + mcq["id"],
+                params={"expected_version": editor["version"]},
+            )
+            assert response.status_code == 200, response.text
+            editor = response.json()
+            approved = c.post(
+                prefix + "/approve", json={"expected_version": editor["version"]}
+            )
+            assert approved.status_code == 200, approved.text
+            opened = c.post(
+                prefix + "/open",
+                json={"expected_version": approved.json()["row_version"]},
+            )
+            assert opened.status_code == 200, opened.text
+            assert (
+                c.patch(
+                    prefix + "/questions/" + question["id"],
+                    json={**body, "expected_version": opened.json()["row_version"]},
+                ).status_code
+                == 409
+            )
+            seed_answers(limited, editable_id, 6)
+            campaign_transition(limited, editable_id, "close")
+            editor_run = start_run(limited, editable_id)
+            Worker(limited).drain()
+            editor_publication = publish(limited, editor_run["id"])
+            with limited.session() as session:
+                snapshot = session.get(Publication, editor_publication).snapshot
+                assert snapshot["question_approval"]["actor_id"] == "pg-policy-hr"
+                written_rows = [
+                    r for r in snapshot["rows"] if r["skill_id"] == question["skill_id"]
+                ]
+                assert written_rows and all(
+                    r["expected_written_questions"] == 3 and r["coverage"] == 1
+                    for r in written_rows
+                )
         print(
-            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role + HR policy versioning, quality decisions and catalog CRUD/snapshots."
+            "PostgreSQL PASS: SQLite migration + 42 skills + 30 participants + 3 role profiles + 22-question forms + worker + publication + metrics + authenticated plans and scoped Excel + PostgreSQL control-store auth and atomic limits + CRUD-only runtime role + HR policy versioning, quality decisions and catalog CRUD/snapshots and HR question authoring/approval/publication with variable scoring."
         )
 
 

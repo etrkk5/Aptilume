@@ -3463,3 +3463,129 @@ textarea {
   border-radius: 5px;
   padding: 10px 12px;
 }
+
+.modal-wide {
+  width: min(1120px, 96vw);
+}
+.question-set-editor {
+  display: grid;
+  gap: 20px;
+}
+.question-set-editor form {
+  display: grid;
+  gap: 18px;
+}
+.question-editor-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 18px;
+}
+.question-set-summary,
+.question-card-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.question-set-summary h3 {
+  margin-top: 0;
+}
+.question-card-heading .eyebrow {
+  line-height: 1.7;
+}
+.question-editor-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.question-editor-card h3 {
+  line-height: 1.7;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+.question-editor-card li {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.question-set-editor details {
+  padding: 12px 0;
+}
+.question-set-editor summary {
+  cursor: pointer;
+  color: var(--heading);
+  font-size: 12px;
+}
+.question-option-editor {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0;
+}
+.question-option-editor > label:not(.checkbox) {
+  flex: 1;
+}
+.question-rubric-editor {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 16px 0;
+  display: grid;
+  gap: 12px;
+}
+.question-anchor-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.question-editor-issues,
+.question-editor-error,
+.question-editor-confirm {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--soft, #f4f7fb);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.question-editor-error {
+  display: flex;
+  align-items: start;
+  gap: 12px;
+}
+.question-editor-error .text-btn {
+  display: block;
+  margin-top: 10px;
+}
+.question-editor-issues ul {
+  margin-bottom: 0;
+  padding-left: 18px;
+}
+.question-publish-actions {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.question-publish-actions .btn {
+  white-space: normal;
+}
+@media (max-width: 650px) {
+  .question-card-heading,
+  .question-set-summary {
+    flex-direction: column;
+  }
+  .question-option-editor {
+    flex-wrap: wrap;
+  }
+  .question-publish-actions .catalog-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+}

@@ -308,8 +308,31 @@ def test_manager_campaign_captures_only_owned_people(store, scoped):
         }
         assert c.post(f"/api/v1/campaigns/{cid}/generate-questions").status_code == 202
         Worker(store).drain()
-        assert c.post(f"/api/v1/campaigns/{cid}/approve").status_code == 200
-        assert c.post(f"/api/v1/campaigns/{cid}/open").status_code == 200
+        version = c.get(f"/api/v1/campaigns/{cid}/question-set").json()["version"]
+        assert (
+            c.post(
+                f"/api/v1/campaigns/{cid}/approve", json={"expected_version": version}
+            ).status_code
+            == 403
+        )
+        assert (
+            c.post(
+                f"/api/v1/campaigns/{cid}/open", json={"expected_version": version}
+            ).status_code
+            == 403
+        )
+        with as_user("hr") as hr:
+            approved = hr.post(
+                f"/api/v1/campaigns/{cid}/approve", json={"expected_version": version}
+            )
+            assert approved.status_code == 200
+            assert (
+                hr.post(
+                    f"/api/v1/campaigns/{cid}/open",
+                    json={"expected_version": approved.json()["row_version"]},
+                ).status_code
+                == 200
+            )
         assert {a["participant_id"] for a in assignments(store, cid)} == {
             P(1),
             P(3),

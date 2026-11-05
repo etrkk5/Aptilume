@@ -540,8 +540,11 @@ def generate_questions(store, job):
                 )
             )
         c.status = "content_review"
+        c.row_version += 1
         c.config = {
             **c.config,
+            "question_set_revision": 1,
+            "question_approval": None,
             "generation_policy_id": instructions["id"],
             "generation_policy_version": instructions["version"],
         }
@@ -557,12 +560,41 @@ def generate_questions(store, job):
         )
 
 
-def campaign_transition(store, cid, action):
+def campaign_transition(store, cid, action, expected_version=None, actor_id=None):
     with store.session() as s:
         c = get(s, Campaign, cid)
-        if action == "approve" and c.status == "content_review":
+        if action in {"approve", "open"}:
+            from .question_editor import (
+                lock_campaign,
+                validate_publication,
+                form_hashes,
+                set_counts,
+            )
+
+            c = lock_campaign(s, cid, expected_version)
+            approved_questions = validate_publication(s, c)
+        if action == "approve" and c.status in {"content_review", "ready"}:
             c.status = "ready"
+            c.config = {
+                **c.config,
+                "question_counts": set_counts(c.config, approved_questions),
+                "question_form_hashes": form_hashes(c.config, approved_questions),
+                "question_approval": {
+                    "revision": c.config.get("question_set_revision", 1),
+                    "actor_id": actor_id,
+                    "approved_at": now(),
+                },
+            }
+            c.row_version += 1
         elif action == "open" and c.status == "ready":
+            if (c.config.get("question_approval") or {}).get(
+                "revision"
+            ) != c.config.get("question_set_revision", 1):
+                raise DomainError(
+                    "question_approval_required",
+                    "Güncel soru seti önce İK tarafından onaylanmalı.",
+                    409,
+                )
             questions = list(
                 s.scalars(
                     select(Question)
@@ -619,6 +651,7 @@ def campaign_transition(store, cid, action):
                         )
                     )
             c.status = "open"
+            c.row_version += 1
         elif action == "close":
             changed = s.execute(
                 update(Campaign)
@@ -638,7 +671,16 @@ def campaign_transition(store, cid, action):
             raise DomainError(
                 "invalid_state", "Bu kampanya durumunda işlem yapılamaz.", 409
             )
-        s.add(Audit(action=f"campaign_{action}", entity_id=cid, detail={}))
+        s.add(
+            Audit(
+                action=f"campaign_{action}",
+                entity_id=cid,
+                detail={
+                    "actor_id": actor_id,
+                    "question_set_revision": c.config.get("question_set_revision", 1),
+                },
+            )
+        )
         return asdict(c)
 
 

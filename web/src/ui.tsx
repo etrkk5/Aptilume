@@ -18,7 +18,7 @@ export function Button({
     </button>
   );
 }
-export function Modal({ title, children, onClose }: any) {
+export function Modal({ title, children, onClose, wide = false }: any) {
   const panel = useRef<HTMLElement>(null),
     close = useRef(onClose);
   close.current = onClose;
@@ -58,7 +58,7 @@ export function Modal({ title, children, onClose }: any) {
     <div className="modal-backdrop" onMouseDown={onClose}>
       <section
         ref={panel}
-        className="modal"
+        className={wide ? "modal modal-wide" : "modal"}
         role="dialog"
         aria-modal="true"
         aria-label={title}

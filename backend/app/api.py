@@ -16,6 +16,7 @@ from .models import *
 from .services import *
 from .reporting import metrics, publish, enrich_snapshot
 from .providers import Provider
+from .question_editor import VersionInput
 from .audit import correlation_context
 from .validation import (
     TeamInput,
@@ -81,7 +82,7 @@ def create_app(settings=None, store=None, auth_service=None):
 
     app = FastAPI(
         title="Aptilume · AI Skills Intelligence",
-        version="0.5.0",
+        version="0.6.0",
         docs_url="/docs" if store.settings.demo else None,
         openapi_url="/openapi.json" if store.settings.demo else None,
         redoc_url=None,
@@ -264,6 +265,8 @@ def create_app(settings=None, store=None, auth_service=None):
                         "created_at": c.created_at,
                         "publication_id": c.publication_id,
                         "can_manage": campaign_control(s, c, actor),
+                        "question_counts": c.config.get("question_counts", {}),
+                        "row_version": c.row_version,
                         "assigned": len(
                             list(
                                 s.scalars(
@@ -521,16 +524,20 @@ def create_app(settings=None, store=None, auth_service=None):
             ]
 
     @app.post("/api/v1/campaigns/{cid}/approve")
-    def approve_campaign(cid: str):
+    def approve_campaign(cid: str, value: VersionInput):
+        actor = require_hr()
         with store.session() as s:
             check_campaign(s, cid, write=True)
-        return campaign_transition(store, cid, "approve")
+        return campaign_transition(
+            store, cid, "approve", value.expected_version, actor.id
+        )
 
     @app.post("/api/v1/campaigns/{cid}/open")
-    def open_campaign(cid: str):
+    def open_campaign(cid: str, value: VersionInput):
+        actor = require_hr()
         with store.session() as s:
             check_campaign(s, cid, write=True)
-        return campaign_transition(store, cid, "open")
+        return campaign_transition(store, cid, "open", value.expected_version, actor.id)
 
     @app.post("/api/v1/campaigns/{cid}/close")
     def close_campaign(cid: str):
@@ -1014,6 +1021,9 @@ def create_app(settings=None, store=None, auth_service=None):
     from .catalog import install_catalog_routes
 
     install_catalog_routes(app, store)
+    from .question_editor import install_question_editor
+
+    install_question_editor(app, store)
     from .quality_routes import install_quality_routes
 
     install_quality_routes(app, store)

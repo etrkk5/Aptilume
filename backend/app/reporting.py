@@ -1,6 +1,6 @@
 from collections import defaultdict, Counter
 from statistics import mean, median
-from sqlalchemy import select
+from sqlalchemy import select, func
 from .models import *
 from .store import DomainError, get
 
@@ -21,6 +21,18 @@ def build_snapshot(s, run_id):
         )
     }
     assigned_skills = assignment_skills(s, ass)
+    expected_written = {
+        (aid, sid): count
+        for aid, sid, count in s.execute(
+            select(AssignedQuestion.assignment_id, Question.skill_id, func.count())
+            .join(Question, Question.id == AssignedQuestion.question_id)
+            .where(
+                AssignedQuestion.assignment_id.in_(list(ass)),
+                Question.type == "open_text",
+            )
+            .group_by(AssignedQuestion.assignment_id, Question.skill_id)
+        )
+    }
     skills = {x.id: x for x in s.scalars(select(Skill))}
     evaluations = {
         (e.answer_id, e.pass_no): e
@@ -97,7 +109,10 @@ def build_snapshot(s, run_id):
         target = targets.get(sid, {"target_level": None, "criticality": 1})
         written = [v for v in values if v[0].type == "open_text"]
         valid_scores = [v[3] for v in written if v[3] is not None]
-        complete = len(written) == 2 and len(valid_scores) == 2
+        expected = expected_written.get((aid, sid), 0)
+        complete = (
+            expected > 0 and len(written) == expected and len(valid_scores) == expected
+        )
         mcq = [
             int(
                 set(v[1].selected)
@@ -134,6 +149,11 @@ def build_snapshot(s, run_id):
             if sid in campaign.config["common_skills"]
             else f"{role['id']}-v{role['version']}"
         )
+        group_key = "common" if sid in campaign.config["common_skills"] else role["id"]
+        if campaign.config.get("question_form_hashes", {}).get(group_key):
+            comparison_group += (
+                "-q" + campaign.config["question_form_hashes"][group_key]
+            )
         rows.append(
             {
                 "assignment_id": aid,
@@ -174,7 +194,8 @@ def build_snapshot(s, run_id):
                     if self_level and self_level <= 3 and level
                     else None
                 ),
-                "coverage": len(valid_scores) / 2,
+                "coverage": len(valid_scores) / expected if expected else 0,
+                "expected_written_questions": expected,
                 "status": "complete" if complete else "incomplete",
                 "levels_not_measured": [4, 5],
             }
@@ -186,6 +207,8 @@ def build_snapshot(s, run_id):
         "input_hash": run.input_hash,
         "created_at": now(),
         "common_skill_ids": campaign.config["common_skills"],
+        "question_set_revision": campaign.config.get("question_set_revision", 1),
+        "question_approval": campaign.config.get("question_approval"),
         "prompt_policy": {
             "generation_id": campaign.config.get("generation_policy_id"),
             "generation_version": campaign.config.get("generation_policy_version"),

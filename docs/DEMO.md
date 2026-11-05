@@ -10,7 +10,7 @@ Sunum modu, üretim kimlik doğrulamasını gevşetmeden ayrı bir veri alanı k
 | `production` | Normal/kurumsal depolar, gerçek AD/LLM, HTTPS/CA, kalıcı Secret ve güçlü ilk parola kuralları. Demo kimlikleri, demo deposu ve mock değerlendirme reddedilir. Varsayılan mod budur. |
 | `development` / `test` | Geliştirme/test davranışı; sunum hesapları otomatik açılmaz. |
 
-Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.5.0` image ile:
+Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.6.0` image ile:
 
 ```bash
 docker compose -f compose.dev.yml up -d --no-build
@@ -61,3 +61,7 @@ Detaylı akış ve yükseltme: [0.4.0 özellikleri](FEATURES_0_4.md).
 ## 0.5.0 katalog yönetimi
 
 İK hesabı → Yetkinlik kataloğu → Yetkinlik ekle. Ad, tanım ve beş seviye tanımını girin. Karttan **Düzenle**, **Yetkinliği sil** veya arşivde **Geri yükle** işlemlerini gösterin. Silme geçmişi korumak için arşivler; üç zorunlu ortak yetkinlik silinemez. Yeni yetkinliği Ekipler ve hedefler içindeki ekip/rol hedeflerine ekleyerek sonraki ölçümün üretimine dahil edin.
+
+## 0.6.0 İK soru editörü
+
+İK ile yeni dönem oluşturun → Soruları hazırla → Soruları düzenle ve yayınla. Ortak/rol grubunu seçip soru ekleyin veya metin/seçenek/rubriği değiştirin; Soruyu kaydet ile kalıcı taslağı gösterin. Seti onayla henüz anket açmaz. Onay sonrası bir düzeltme seti yeniden incelemeye döndürür. Onayla ve yayınla çalışan formlarını oluşturur; sonrasında soru değişiklikleri engellenir. Yönetici yalnız kendi döneminin sorularını inceleyebilir; onay/yayın için İK gerekir. [Detaylar](FEATURES_0_6.md).

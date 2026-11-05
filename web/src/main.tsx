@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
@@ -60,6 +60,19 @@ import {
   type ReportFilters,
 } from "./analytics";
 
+const QuestionSetEditor = lazy(() =>
+  import("./question-editor").then((m) => ({ default: m.QuestionSetEditor })),
+);
+function campaignCount(c: any) {
+  const counts = Object.values(c.question_counts || {}).map(Number);
+  if (!counts.length)
+    return ["draft", "preparing", "content_review"].includes(c.status)
+      ? "AI başlangıç seti · 22 soru / rol · İK incelemesi"
+      : "22 soru / rol · Yayımlanmış set";
+  const min = Math.min(...counts),
+    max = Math.max(...counts);
+  return `${min === max ? min : `${min}–${max}`} soru / rol · İK onaylı set`;
+}
 type Any = any;
 const API = "/api/v1";
 const labels: Record<string, string> = {
@@ -618,6 +631,7 @@ function App() {
           )}
           {view === "campaigns" && (
             <Campaigns
+              user={user}
               boot={boot}
               action={action}
               busy={busy}
@@ -860,7 +874,7 @@ function App() {
   );
 }
 
-function Campaigns({ boot, action, busy, setView }: Any) {
+function Campaigns({ boot, action, busy, setView, user }: Any) {
   const [modal, setModal] = useState(false),
     [name, setName] = useState(""),
     [qs, setQs] = useState<Any>(null),
@@ -890,7 +904,7 @@ function Campaigns({ boot, action, busy, setView }: Any) {
                 <Badge status={c.status} />
                 {c.publication_id && <Badge status="published" />}
               </div>
-              <p>Açık uçlu ağırlıklı · 22 soru · 6 yetkinlik / rol</p>
+              <p>{campaignCount(c)}</p>
               <div className="campaign-meta">
                 <span>
                   <Users size={15} />
@@ -924,40 +938,11 @@ function Campaigns({ boot, action, busy, setView }: Any) {
                   Soruları hazırla <Sparkles size={15} />
                 </Button>
               )}
-              {c.status === "content_review" && (
-                <>
-                  <Button
-                    secondary
-                    onClick={async () =>
-                      setQs(await api(`/campaigns/${c.id}/questions`))
-                    }
-                  >
-                    Soruları incele
-                  </Button>
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      action(
-                        () => api(`/campaigns/${c.id}/approve`, "POST"),
-                        "Soru seti onaylandı.",
-                      )
-                    }
-                  >
-                    Seti onayla <Check size={15} />
-                  </Button>
-                </>
-              )}
-              {c.status === "ready" && (
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    action(
-                      () => api(`/campaigns/${c.id}/open`, "POST"),
-                      "Anket yanıt toplamaya açıldı.",
-                    )
-                  }
-                >
-                  Anketi aç <ArrowRight size={15} />
+              {["content_review", "ready"].includes(c.status) && (
+                <Button secondary onClick={() => setQs(c.id)}>
+                  {user.permissions.all_data
+                    ? "Soruları düzenle ve yayınla"
+                    : "Soruları incele"}
                 </Button>
               )}
               {c.status === "open" && (
@@ -1091,35 +1076,13 @@ function Campaigns({ boot, action, busy, setView }: Any) {
         </Modal>
       )}
       {qs && (
-        <Modal title="Soru ve rubrik incelemesi" onClose={() => setQs(null)}>
-          <div className="modal-body question-review">
-            {qs.map((q: Any, i: number) => (
-              <article key={q.id}>
-                <span className="eyebrow">
-                  {i + 1} ·{" "}
-                  {q.form_key === "common"
-                    ? "Ortak soru seti"
-                    : boot.role_profiles.find((r: Any) => r.id === q.form_key)
-                        ?.title || "Role özel soru seti"}{" "}
-                  · {q.type}
-                </span>
-                <h3>{q.prompt}</h3>
-                {q.rubric.map((r: Any) => (
-                  <p key={r.id}>
-                    <b>{r.label}</b> · {r.descriptor}
-                  </p>
-                ))}
-                {q.options?.length > 0 &&
-                  q.options.map((o: Any) => (
-                    <p key={o.id}>
-                      {o.text}
-                      {o.correct && " ✓"}
-                    </p>
-                  ))}
-              </article>
-            ))}
-          </div>
-        </Modal>
+        <Suspense fallback={<p role="status">Soru editörü yükleniyor…</p>}>
+          <QuestionSetEditor
+            campaignId={qs}
+            action={action}
+            onClose={() => setQs(null)}
+          />
+        </Suspense>
       )}
     </>
   );
@@ -1421,7 +1384,7 @@ function Survey({ boot, notify, refresh, initialCampaign }: Any) {
               görüntüleyin.
             </p>
           </div>
-          <span className="small-pill">22 soru / form</span>
+          <span className="small-pill">Her soru zorunlu</span>
         </div>
         <table>
           <thead>

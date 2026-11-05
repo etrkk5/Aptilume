@@ -176,7 +176,7 @@ class Worker:
                 "reference_answer": q.reference,
                 "evidence_type": (
                     "self_reported_experience"
-                    if "EXPERIENCE" in q.reference
+                    if q.reference.endswith("\nEXPERIENCE")
                     else "scenario_reasoning"
                 ),
             }

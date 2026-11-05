@@ -34,7 +34,7 @@ Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.5.0 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.6.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -174,3 +174,5 @@ Kaynak katalog 42 yetkinlik, 210 seviye tanımı ve 126 eşleştirme içerir. Do
 Yazılı puan, MCQ ve öz beyan ayrı göstergelerdir. Teknik hata sıfır puan sayılmaz. Seviye önerisi davranış göstergelerinden hesaplanır; 0–100 skor beşe bölünmez. L4/L5 başlangıç formuyla doğrulanmaz; doğrulanmış seviye boş kalır. Toplu grupta beşten az geçerli kayıt varsa puan bastırılır. Gerçek AD/LLM, kurumun ölçüm kalibrasyonu, OpenShift koşulları ve hedef yük kurum ortamında ayrıca doğrulanmalıdır.
 
 İK **Yetkinlik kataloğu** ekranından yetkinlik ekleyebilir, tanımı/sorumluları/L1–L5 seviyelerini düzenleyebilir, silebilir ve arşivden geri yükleyebilir. Geçmiş ölçümler kendi katalog sürümünü korur. [0.5.0 katalog rehberi](docs/FEATURES_0_5.md).
+
+0.6.0: AI soru üretimi sonrasında İK **Soruları düzenle ve yayınla** ekranından soru ekleyebilir, kopyalayabilir, düzeltebilir, silebilir ve taslak kaydedebilir. Onay/yayın yalnız İK'ya açıktır; yayın öncesi kapsam kontrol edilir, yayın sonrası içerik sabitlenir. Soru sayısı ve rapor paydaları atanmış sete göre değişir. [İK soru editörü rehberi](docs/FEATURES_0_6.md).
