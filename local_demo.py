@@ -63,4 +63,16 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Windows locale defaults must not change catalog/instruction file encoding.
+    if not sys.flags.utf8_mode:
+        os.execv(
+            sys.executable,
+            [
+                sys.executable,
+                "-X",
+                "utf8",
+                str(Path(__file__).resolve()),
+                *sys.argv[1:],
+            ],
+        )
     main()

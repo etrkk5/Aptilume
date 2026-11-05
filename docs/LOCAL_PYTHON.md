@@ -67,7 +67,7 @@ python3.12 -m venv .venv
 
 ## Tekrar çalıştırma ve veriler
 
-İki terminalde Ctrl+C süreçleri durdurur. Sonraki açılışta yalnız `api` ve `worker` komutlarını çalıştırın. Başlatıcı ortam değişkenlerini kendi ayarlar; `.env` okunmasına veya elle değişken tanımlamaya ihtiyaç duymaz. Her zaman izole `demo` modu, klasör içindeki `runtime/presentation-demo` ve yalnız `127.0.0.1` bağlantısı kullanılır. Klasörü taşımadan önce süreçleri durdurun; kurulu ortam ve veritabanı yollarını korumak için ilk kurulumu kalıcı konumda yapın. `runtime` klasörünü silmek yerel veri/şifreleri siler; Git'e eklemeyin.
+İki terminalde Ctrl+C süreçleri durdurur. Sonraki açılışta yalnız `api` ve `worker` komutlarını çalıştırın. Başlatıcı Türkçe katalog/talimat dosyaları için Python UTF-8 modunu açar ve ortam değişkenlerini kendi ayarlar; `.env` okunmasına veya elle değişken tanımlamaya ihtiyaç duymaz. Her zaman izole `demo` modu, klasör içindeki `runtime/presentation-demo` ve yalnız `127.0.0.1` bağlantısı kullanılır. Klasörü taşımadan önce süreçleri durdurun; kurulu ortam ve veritabanı yollarını korumak için ilk kurulumu kalıcı konumda yapın. `runtime` klasörünü silmek yerel veri/şifreleri siler; Git'e eklemeyin.
 
 ## Paket üretimi ve kurum deployment'ı
 

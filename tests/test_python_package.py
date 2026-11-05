@@ -5,6 +5,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 import zipfile
 
@@ -113,3 +115,21 @@ def test_launcher_rejects_missing_ui_and_bad_port(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as error:
         launcher.main(["api", "--port", "0"])
     assert error.value.code == 2
+
+
+def test_launcher_uses_utf8_even_when_system_locale_does_not():
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "local_demo.py"), "--help"],
+        env={
+            **os.environ,
+            "PYTHONUTF8": "0",
+            "PYTHONCOERCECLOCALE": "0",
+            "LC_ALL": "C",
+        },
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "yalnız Python" in result.stdout
