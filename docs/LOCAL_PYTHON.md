@@ -2,6 +2,8 @@
 
 Bu paket derlenmiş web arayüzünü içerir. Çalıştırılan süreçler Python API ve worker'dır. Node.js, npm, pnpm, Docker ve ayrı bir veritabanı kurulumu gerekmez. Tarayıcı hazır JavaScript/CSS dosyalarını Python sunucusundan alır. Python 3.12 önerilir. Demo sentetik veriler ve mock LLM kullanır.
 
+Hazır ZIP repodaki [packages/Aptilume-0.5.0-Python.zip](../packages/Aptilume-0.5.0-Python.zip) dosyasıdır. `git pull` ile alın veya GitHub'da dosyayı açıp indirin. ZIP'i tamamen çıkarın ve aşağıdaki işlemleri çıkarılan `Aptilume-0.5.0-Python` klasöründe yapın.
+
 ## Windows / PowerShell
 
 ZIP dosyasını tamamen normal bir klasöre çıkarın. Terminali `local_demo.py`, `backend`, `data`, `web` ve `requirements.lock.txt` bulunan klasörde açın. ZIP içinden doğrudan çalıştırmayın.

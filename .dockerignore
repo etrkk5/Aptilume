@@ -3,6 +3,7 @@
 runtime
 work
 outputs
+packages
 web/node_modules
 web/dist
 web/*.tsbuildinfo

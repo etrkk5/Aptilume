@@ -8,7 +8,7 @@ Kurum içi AI yetkinliklerini ekip bağlamı ve rol hedefleriyle ölçen web uyg
 
 Gereksinimler: Python 3.12+, Node 22+, pnpm 11.25 veya Docker.
 
-Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **hazır arayüz içeren Python paketini** kullanın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u hazır `web/dist` içermez; bu kullanım için paket ZIP'i gerekir.
+Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.5.0-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
 
 ```bash
 python3 -m venv .venv
