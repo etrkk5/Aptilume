@@ -10,7 +10,7 @@ Sunum modu, üretim kimlik doğrulamasını gevşetmeden ayrı bir veri alanı k
 | `production` | Normal/kurumsal depolar, gerçek AD/LLM, HTTPS/CA, kalıcı Secret ve güçlü ilk parola kuralları. Demo kimlikleri, demo deposu ve mock değerlendirme reddedilir. Varsayılan mod budur. |
 | `development` / `test` | Geliştirme/test davranışı; sunum hesapları otomatik açılmaz. |
 
-Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.6.1` image ile:
+Yerel `.env` içinde `APP_MODE=demo` seçin. Güncel `aptilume:0.7.0` image ile:
 
 ```bash
 docker compose -f compose.dev.yml up -d --no-build

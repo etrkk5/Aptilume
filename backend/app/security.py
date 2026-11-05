@@ -19,6 +19,7 @@ actor_context = ContextVar("actor", default=None)
 _sync_lock = threading.Lock()
 _login_slots = threading.BoundedSemaphore(4)
 passwords = PasswordHasher()
+LOCAL_ACCOUNTS = {"admin": "local-admin", "hr": "local-hr"}
 
 
 @contextmanager
@@ -90,6 +91,7 @@ class Actor:
             "participant_id": self.participant_id,
             "csrf_token": self.csrf_token,
             "temporary_password": self.temporary_password,
+            "can_change_password": self.id in LOCAL_ACCOUNTS.values(),
             "scope_revision": hashlib.sha256(
                 repr(
                     (
@@ -208,6 +210,24 @@ class AuthService:
                 raise RuntimeError(
                     "Üretime geçmeden geçici admin parolasını değiştirin."
                 )
+            hr_password = os.getenv("BOOTSTRAP_HR_PASSWORD")
+            if hr_password is not None and not s.get(DirectoryUser, "local-hr"):
+                if not strong_password(hr_password):
+                    raise RuntimeError(
+                        "BOOTSTRAP_HR_PASSWORD en az 15 karakterli güçlü bir parola olmalı."
+                    )
+                s.add(
+                    DirectoryUser(
+                        id="local-hr",
+                        username="hr",
+                        display_name="İnsan kaynakları",
+                        roles=["hr"],
+                        groups=[],
+                        source="local",
+                        password_hash=passwords.hash(hr_password),
+                        temporary_password=False,
+                    )
+                )
 
     def login(self, username, password, client_ip):
         from .throttle import reserve, refund
@@ -229,16 +249,22 @@ class AuthService:
                 429,
             )
         try:
+            local_id = LOCAL_ACCOUNTS.get(username.casefold())
+            with self.store.cs() as session:
+                local_identity = (
+                    session.get(DirectoryUser, local_id) if local_id else None
+                )
             if self.store.settings.presentation_demo:
                 from .demo import authenticate_demo
 
                 user_id = authenticate_demo(self.store, username, password)
-            elif username.casefold() == "admin":
-                with self.store.cs() as session:
-                    identity = session.get(DirectoryUser, "local-admin")
+            elif local_identity is not None:
+                identity = local_identity
                 try:
-                    verified = identity.active and passwords.verify(
-                        identity.password_hash, password
+                    verified = (
+                        identity.source == "local"
+                        and identity.active
+                        and passwords.verify(identity.password_hash, password)
                     )
                 except VerificationError:
                     verified = False
@@ -379,7 +405,7 @@ class AuthService:
                 )
 
     def change_password(self, actor, current, new):
-        if actor.id != "local-admin":
+        if actor.id not in LOCAL_ACCOUNTS.values():
             raise DomainError(
                 "directory_password",
                 "Kurumsal parolanız Active Directory üzerinden yönetilir.",
@@ -396,17 +422,22 @@ class AuthService:
         with password_capacity():
             with self.store.cs() as s:
                 user = s.get(DirectoryUser, actor.id)
+                if not user or not user.active or user.source != "local":
+                    raise DomainError("session_invalid", "Oturum geçerli değil.", 401)
                 try:
                     passwords.verify(user.password_hash, current)
                 except VerificationError:
                     raise DomainError("invalid_password", "Mevcut parola hatalı.", 403)
                 user.password_hash = passwords.hash(new)
                 user.temporary_password = False
-                policy = s.get(Setting, "local_password_policy")
-                if policy:
-                    policy.value = {"version": 2}
-                else:
-                    s.add(Setting(key="local_password_policy", value={"version": 2}))
+                if actor.id == "local-admin":
+                    policy = s.get(Setting, "local_password_policy")
+                    if policy:
+                        policy.value = {"version": 2}
+                    else:
+                        s.add(
+                            Setting(key="local_password_policy", value={"version": 2})
+                        )
                 s.execute(delete(AuthSession).where(AuthSession.user_id == actor.id))
                 s.add(
                     ControlEvent(

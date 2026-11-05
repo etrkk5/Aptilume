@@ -6,9 +6,11 @@ Kurum içi AI yetkinliklerini ekip bağlamı ve rol hedefleriyle ölçen web uyg
 
 ## Başlangıç
 
+**OpenShift'te LDAP olmadan HR + admin ile başlamak için:** [ilk kurulum rehberi](docs/FIRST_INSTALL.md). Tek `aptilume-secrets` içinde iki başlangıç parolası, kalıcı şifreleme anahtarı ve `DATABASE_URL` verilir. PostgreSQL hem hesapları hem anket verilerini tutar; kullanıcı adları `admin` ve `hr` olur. LDAP daha sonra panelden eklenebilir.
+
 Gereksinimler: Python 3.12+, Node 22+, pnpm 11.25 veya Docker.
 
-Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.6.1-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
+Şirket bilgisayarında Node.js/Docker kullanılamıyorsa **[hazır arayüz içeren Python paketini](packages/Aptilume-0.7.0-Python.zip)** kullanın. `git pull` sonrası ZIP `packages/` klasöründedir; tamamen çıkarıp içindeki klasörde çalıştırın. Python 3.12 ile kurulum ve iki süreçlik başlatma adımları [LOCAL_PYTHON.md](docs/LOCAL_PYTHON.md) içindedir. `local_demo.py` ortam değişkenlerini otomatik tanımlar; yalnız izole yerel demo açar. Normal Git checkout'u kökte hazır `web/dist` içermez; bu kullanım için paket ZIP'ini açmak gerekir.
 
 ```bash
 python3 -m venv .venv
@@ -29,12 +31,12 @@ Ayrı terminalde:
 APP_MODE=development PYTHONPATH=backend .venv/bin/python -m app.cli worker
 ```
 
-Uygulama: http://127.0.0.1:8080. Yerel ilk kurulum hesabı **admin / admin**. Bu hesap yalnızca entegrasyonları yönetir. AD bilgileri girilmeden kurumsal kullanıcı girişi yapılamaz. Temiz kurulum örnek çalışan veya kampanya oluşturmaz; yalnızca 42 kaynak yetkinliğini yükler.
+Uygulama: http://127.0.0.1:8080. Yerel geliştirme ilk kurulum hesabı **admin / admin**. Bu hesap yalnızca entegrasyonları yönetir. `BOOTSTRAP_HR_PASSWORD` verilirse LDAP olmadan yerel `hr` hesabı da oluşturulur. AD bilgileri girilmeden kurumsal kullanıcı girişi yapılamaz. Temiz kurulum örnek çalışan veya kampanya oluşturmaz; yalnızca 42 kaynak yetkinliğini yükler.
 
 Docker ile:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.6.1 .
+docker buildx build --platform linux/amd64,linux/arm64 --load -t aptilume:0.7.0 .
 docker compose -f compose.dev.yml up -d --no-build
 ```
 
@@ -96,7 +98,7 @@ Oturumlar sunucuda tutulan, rastgele ve yalnızca hash’i saklanan cookie’ler
 
 İlk kurumsal kullanıcı eşitlemesi tamamlandıktan sonra entegrasyon admininin AD değişikliği öneri olarak saklanır. Aktif politika değişmez; ayrı bir İK kullanıcısı öneriyi inceleyip uygular veya reddeder. Kurulum kilidi kullanıcılar devre dışı bırakıldığında yeniden açılmaz. İlk kurulum hesabı, gerçek AD güven ilişkisi kurulana kadar IAM bootstrap yetkisine sahiptir; bu aşama yalnızca kontrollü işletim ağı üzerinden yapılmalıdır.
 
-Sunucu veya servis hesabı değişirse parola yeniden girilmelidir. Kayıtlı sırlar geri okunmaz; boş parola korunur. Yerel adminin güçlü parola belirleme ve çıkış işlemleri hesap menüsündedir. Yerel hesabın kapatılması gerekiyorsa önce kurumsal yönetici ve kurtarma süreci işletim ekibince doğrulanmalıdır.
+Sunucu veya servis hesabı değişirse parola yeniden girilmelidir. Kayıtlı sırlar geri okunmaz; boş parola korunur. Yerel admin ve HR hesaplarının güçlü parola belirleme ve çıkış işlemleri hesap menüsündedir. Yerel hesabın kapatılması gerekiyorsa önce kurumsal yönetici ve kurtarma süreci işletim ekibince doğrulanmalıdır.
 
 ## İş akışı
 
@@ -124,7 +126,7 @@ PYTHONPATH=backend python -m app.cli storage-migrate --profile-id PROFIL_ID --se
 
 Bu komut yalnızca işletim erişimi olan operatör içindir. Yeni bağlantıya geçildikten sonra API/worker yeniden başlatılır. Kontrol deposu otomatik taşınmaz; onun adresi başlangıç Secret/env ayarıdır.
 
-Kontrol deposu kimlikleri, oturumları, bağlantı sürümlerini, görev seçimlerini ve şifreli sırları tutar. Uygulama deposu anketleri, sonuçları, kapsamlı export kayıtlarını ve gelişim planlarını tutar. Kontrol deposunun başlangıç URL’si `CONTROL_STORE_URL` ile verilir. Uygulama DB’si erişilemezse yerel admin bağlantı kurtarma ekranı açık kalır.
+Kontrol deposu kimlikleri, oturumları, bağlantı sürümlerini, görev seçimlerini ve şifreli sırları tutar. Uygulama deposu anketleri, sonuçları, kapsamlı export kayıtlarını ve gelişim planlarını tutar. Kontrol deposunun başlangıç URL’si `CONTROL_STORE_URL` ile verilir. Boş kurulumda `DATABASE_URL` her iki deponun aynı PostgreSQL üzerinde başlamasını sağlar; varsa `CONTROL_STORE_URL` kontrol deposu için önce gelir. Uygulama DB’si erişilemezse yerel admin bağlantı kurtarma ekranı açık kalır.
 
 ## OpenShift / üretim ayarları
 
@@ -134,8 +136,9 @@ Image güncel Alpine Python tabanına ve değişmez digestlere sabitlenmiştir. 
 
 - Varsayılan `APP_MODE=production`; geçersiz değer başlangıcı durdurur. Yerelde geliştirme açıkça `APP_MODE=development` olmalıdır. `APP_MODE=production`: Secure cookie/HSTS; API dokümantasyonu, zayıf ilk parola, seed ve mock iş çalıştırma kapalı.
 - Kalıcı ve tüm süreçlerde aynı `SECRET_ENCRYPTION_KEY` (Fernet): cluster Secret’tan verilmelidir. Mevcut şifreli veride anahtar kendiliğinden değiştirilmez.
+- LDAP olmadan HR girişi için `BOOTSTRAP_HR_PASSWORD` eklenebilir; kullanıcı adı `hr`, rolü İK olur. Yerel hesapların parolaları Secret değişince sıfırlanmaz.
 - İlk boş kurulumda benzersiz `BOOTSTRAP_ADMIN_PASSWORD` (en az 15 karakter, en fazla 128 karakter). Yerel `admin/admin` ile kurulmuş veride önce hesap menüsünden parola değiştirilmelidir; üretim başlangıcı geçici parolayı reddeder.
-- `DB_ALLOWED_HOSTS`, `DIRECTORY_ALLOWED_HOSTS`: üretim DB/AD hedeflerinin tam host adları; özel port için `host:port`. Kurum içi CIDR’leri `OUTBOUND_ALLOWED_CIDRS` ile açıkça belirtin. PostgreSQL `verify-full` zorunludur; `sslrootcert` admin profilinde veya kontrol deposu URL’sinde kurumsal CA yoludur.
+- `DB_ALLOWED_HOSTS`, `DIRECTORY_ALLOWED_HOSTS`: üretim DB/AD hedeflerinin tam host adları; özel port için `host:port`. Kurum içi CIDR’leri `OUTBOUND_ALLOWED_CIDRS` ile açıkça belirtin. İlk kurulumda bu DB ağ ayarları verilmemişse operator Secret'ındaki `DATABASE_URL` yalnız kendi DB host/portuna izin verir; başka panel bağlantılarını yetkilendirmez. Açık ağ politikası her zaman önceliklidir. PostgreSQL `verify-full` zorunludur; `sslrootcert` admin profilinde veya kontrol deposu URL’sinde kurumsal CA yoludur.
 - `FORWARDED_ALLOW_IPS`: yalnızca güvenilen Route/proxy IP’leri veya ağları. Varsayılan boş; istemci IP’si için rastgele forwarded header’a güvenilmez. `*` kullanmayın.
 - `PUBLIC_BASE_URL=https://...`: kullanıcıya açılacak Route adresi. TLS sonlandırma/sertifika, CA mount, LLM izinli host’ları, AD/DB ağ erişimi, kalıcı veri ve yedekler işletim ekibince sağlanır.
 - API ve worker ayrı süreç/pod olarak çalışmalıdır. SQLite ile tek API, tek worker ve uygun paylaşılan yerel disk kullanılmalıdır. Çok replica/HA hedefleniyorsa kontrol ve uygulama depoları uygun kurumsal PostgreSQL’e taşınmalı ve eşzamanlılık/yük testi yapılmalıdır.
@@ -178,3 +181,5 @@ Yazılı puan, MCQ ve öz beyan ayrı göstergelerdir. Teknik hata sıfır puan 
 0.6.0: AI soru üretimi sonrasında İK **Soruları düzenle ve yayınla** ekranından soru ekleyebilir, kopyalayabilir, düzeltebilir, silebilir ve taslak kaydedebilir. Onay/yayın yalnız İK'ya açıktır; yayın öncesi kapsam kontrol edilir, yayın sonrası içerik sabitlenir. Soru sayısı ve rapor paydaları atanmış sete göre değişir. [İK soru editörü rehberi](docs/FEATURES_0_6.md).
 
 0.6.1: dar ekranlarda soru editörü ve rapor/anket filtrelerinin genişliği düzeltildi. Uzun başlık, yetkinlik, soru ve referans metinleri satıra bölünür; çalışan formu ekranı genişletmez. [Yerleşim kontrolü](docs/LAYOUT_0_6_1.md).
+
+0.7.0: LDAP beklemeden Secret ile yerel HR + admin kurulumu ve aynı PostgreSQL üzerinde kontrol/uygulama deposu başlangıcı. [İlk kurulum](docs/FIRST_INSTALL.md).

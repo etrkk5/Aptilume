@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from sqlalchemy import select
 from app.config import Settings
-from app.store import Store
+from app.store import Store, engine_for
 from app.services import (
     load_catalog,
     seed_people,
@@ -32,9 +32,83 @@ from app.worker import Worker
 from app.reporting import publish, metrics
 
 
+def check_initial_postgres_install(host):
+    """One Secret URL stores both domains; bootstrap must be safe to repeat."""
+    import subprocess
+    from unittest.mock import patch
+    from cryptography.fernet import Fernet
+    from sqlalchemy import text
+    from app.security import AuthService
+    from app.models import Binding, ProfileVersion
+
+    base_url = f"postgresql+psycopg://postgres:fixture-only@{host}/aptilume_fixture"
+    owner = engine_for(base_url)
+    with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+        conn.execute(text("CREATE DATABASE aptilume_first_install_fixture"))
+    try:
+        with (
+            TemporaryDirectory() as directory,
+            patch.dict(
+                os.environ,
+                {
+                    # Synthetic fixture deliberately uses test TLS policy, never production.
+                    "APP_MODE": "test",
+                    "DATA_DIR": directory,
+                    "DATABASE_URL": base_url.replace(
+                        "/aptilume_fixture",
+                        "/aptilume_first_install_fixture?sslmode=disable",
+                    ),
+                    "CONTROL_STORE_URL": "",
+                    "BOOTSTRAP_ADMIN_PASSWORD": "Fixture-integration-47!",
+                    "BOOTSTRAP_HR_PASSWORD": "Fixture-people-58!",
+                    "SECRET_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+                },
+            ),
+        ):
+            for _ in range(2):
+                subprocess.run(
+                    ["python", "-m", "app.cli", "bootstrap"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            store = Store(Settings.from_env())
+            assert store.application_error is None
+            assert (
+                store.control.url.database
+                == store.engine.url.database
+                == "aptilume_first_install_fixture"
+            )
+            assert store.control.url.get_backend_name() == "postgresql"
+            assert not list(Path(directory).glob("*.db"))
+            with store.session() as session:
+                assert len(list(session.scalars(select(Skill)))) == 42
+                assert not list(session.scalars(select(Participant)))
+            auth = AuthService(store)
+            assert auth.login("hr", "Fixture-people-58!", "fixture-hr")[1].hr
+            assert auth.login("admin", "Fixture-integration-47!", "fixture-admin")[
+                1
+            ].roles == {"admin"}
+            with store.cs() as session:
+                assert len(list(session.scalars(select(DirectoryUser)))) == 2
+                binding = session.get(Binding, "application_db")
+                version = session.get(ProfileVersion, binding.version_id)
+                assert version.config["engine"] == "postgresql"
+                assert store.decrypt(version.secret) == "fixture-only"
+            store.engine.dispose()
+            store.control.dispose()
+    finally:
+        with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(
+                text("DROP DATABASE aptilume_first_install_fixture WITH (FORCE)")
+            )
+        owner.dispose()
+
+
 def main():
     host = os.environ["TEST_DB_HOST"]
     assert host == "aptilume-postgres-verify", "Use the isolated fixture container only"
+    check_initial_postgres_install(host)
     with TemporaryDirectory() as directory:
         path = Path(directory)
         store = Store(Settings(path, f"sqlite:///{path/'control.db'}"))

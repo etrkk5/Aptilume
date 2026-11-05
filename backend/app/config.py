@@ -22,6 +22,7 @@ class Settings:
     export_retention_days: int = 7
     audit_retention_days: int = 90
     presentation_demo: bool = False
+    application_url: str | None = None
 
     def __post_init__(self):
         self.data_dir = Path(self.data_dir).resolve()
@@ -59,12 +60,15 @@ class Settings:
         path = Path(os.getenv("DATA_DIR", str(ROOT / "runtime"))).resolve()
         if mode == "demo":
             path = path / "presentation-demo"
+        database_url = None if mode == "demo" else os.getenv("DATABASE_URL") or None
         return cls(
             path,
             (
                 f"sqlite:///{path / 'control.db'}"
                 if mode == "demo"
-                else os.getenv("CONTROL_STORE_URL", f"sqlite:///{path / 'control.db'}")
+                else os.getenv("CONTROL_STORE_URL")
+                or database_url
+                or f"sqlite:///{path / 'control.db'}"
             ),
             None if mode == "demo" else os.getenv("SECRET_ENCRYPTION_KEY"),
             os.getenv("OUTBOUND_ALLOWED_HOSTS", ""),
@@ -77,4 +81,5 @@ class Settings:
             int(os.getenv("EXPORT_RETENTION_DAYS", "7")),
             int(os.getenv("AUDIT_RETENTION_DAYS", "90")),
             mode == "demo",
+            database_url,
         )

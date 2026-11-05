@@ -48,6 +48,16 @@ def engine_for(url):
 class Store:
     def __init__(self, settings: Settings):
         self.settings = settings
+        initial_database = (
+            self.bootstrap_db_config(settings.application_url)
+            if settings.application_url
+            else None
+        )
+        self._initial_db_target = (
+            (initial_database[0]["host"].casefold(), initial_database[0]["port"])
+            if initial_database
+            else None
+        )
         os.umask(0o007)
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         keyfile = settings.data_dir / ".encryption-key"
@@ -78,11 +88,15 @@ class Store:
                 raise RuntimeError(
                     "Üretim kontrol deposunda PostgreSQL verify-full TLS gerekli."
                 )
+            allowed, networks, restrict_private = self.database_network_policy(
+                url.host, url.port or 5432
+            )
             address = resolve_target(
                 url.host,
                 url.port or 5432,
-                settings.allowed_db_hosts,
-                settings.allowed_cidrs,
+                allowed,
+                networks,
+                production=restrict_private,
                 standard_port=5432,
             )[0]
             control_url = url.update_query_dict(
@@ -109,11 +123,18 @@ class Store:
         self._engine, self._binding_version = None, None
         with self.cs() as s:
             if not s.get(Binding, "application_db"):
-                cfg = {
-                    "engine": "sqlite",
-                    "path": str(settings.data_dir / "application.db"),
-                }
-                p = self._new_profile(s, "db", "Yerel geliştirme", cfg, None)
+                if initial_database:
+                    cfg, secret = initial_database
+                    # Apply the same TLS/host policy as panel-created connections.
+                    self.db_url(cfg, secret)
+                    name = "PostgreSQL · İlk kurulum Secret"
+                else:
+                    cfg, secret = {
+                        "engine": "sqlite",
+                        "path": str(settings.data_dir / "application.db"),
+                    }, None
+                    name = "Yerel geliştirme"
+                p = self._new_profile(s, "db", name, cfg, secret)
                 s.add(Binding(purpose="application_db", version_id=f"{p.id}:1"))
             if not s.get(Binding, "evaluation"):
                 p = self._new_profile(
@@ -182,13 +203,16 @@ class Store:
             return f"sqlite:///{path}"
         if c.get("engine") == "postgresql":
             host = hostname(c["host"])
+            allowed, networks, restrict_private = self.database_network_policy(
+                host, c["port"]
+            )
             if not self.settings.demo:
                 if c["sslmode"] != "verify-full":
                     raise DomainError(
                         "database_tls_required",
                         "Üretimde PostgreSQL verify-full TLS doğrulaması gerekli.",
                     )
-                permitted_host(host, c["port"], self.settings.allowed_db_hosts)
+                permitted_host(host, c["port"], allowed)
             query = {
                 "sslmode": c["sslmode"],
                 "connect_timeout": str(c.get("timeout", 10)),
@@ -199,8 +223,9 @@ class Store:
                 query["hostaddr"] = resolve_target(
                     host,
                     c["port"],
-                    self.settings.allowed_db_hosts,
-                    self.settings.allowed_cidrs,
+                    allowed,
+                    networks,
+                    production=restrict_private,
                     standard_port=5432,
                 )[0]
             query["options"] = "-c statement_timeout=30000 -c lock_timeout=10000"
@@ -214,6 +239,57 @@ class Store:
                 query=query,
             )
         raise DomainError("unsupported_engine", "Bu DB sürücüsü henüz desteklenmiyor.")
+
+    def database_network_policy(self, host, port):
+        # A cluster-supplied DATABASE_URL authorizes exactly that DB host/port.
+        # Panel input cannot extend this grant; explicit network policy wins.
+        allowed, networks = self.settings.allowed_db_hosts, self.settings.allowed_cidrs
+        if (
+            not allowed
+            and not networks
+            and self._initial_db_target == (host.casefold(), port)
+        ):
+            qualified = f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+            return qualified, "", False
+        return allowed, networks, True
+
+    @staticmethod
+    def bootstrap_db_config(value):
+        """Only the initial application binding is seeded from DATABASE_URL."""
+        from sqlalchemy.engine import make_url
+        from sqlalchemy.exc import ArgumentError
+        from .validation import connection_config
+
+        try:
+            url = make_url(value)
+            if (
+                url.drivername != "postgresql+psycopg"
+                or not url.host
+                or not url.username
+                or not url.database
+                or set(url.query) - {"sslmode", "sslrootcert", "connect_timeout"}
+                or any(not isinstance(v, str) for v in url.query.values())
+            ):
+                raise ValueError()
+            cfg = connection_config(
+                "db",
+                {
+                    "engine": "postgresql",
+                    "host": url.host,
+                    "port": url.port or 5432,
+                    "database": url.database,
+                    "username": url.username,
+                    "sslmode": url.query.get("sslmode", "verify-full"),
+                    "sslrootcert": url.query.get("sslrootcert", ""),
+                    "timeout": int(url.query.get("connect_timeout", "10")),
+                },
+            )
+            return cfg, url.password
+        except (ArgumentError, ValueError, TypeError, DomainError):
+            raise DomainError(
+                "invalid_database_url",
+                "DATABASE_URL geçerli bir postgresql+psycopg bağlantı adresi olmalı.",
+            ) from None
 
     def encrypt(self, value):
         return self.cipher.encrypt(value.encode()).decode() if value else None

@@ -84,7 +84,7 @@ export function AccountPanel({
             <Button secondary>Çalışma alanını kaydet</Button>
           </form>
         )}
-        {user.id === "local-admin" && (
+        {user.can_change_password && (
           <form
             className="password-section"
             onSubmit={async (e) => {
@@ -109,7 +109,7 @@ export function AccountPanel({
                 bir parola belirleyin.
               </div>
             )}
-            <h3>Yönetici parolası</h3>
+            <h3>Parolamı değiştir</h3>
             <label>
               Mevcut parola
               <input
